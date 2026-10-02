@@ -12,3 +12,21 @@ export function normalizeMvNumber(input: string): string {
 export function isValidMvMobile(input: string): boolean {
   return MV_MOBILE.test(normalizeMvNumber(input));
 }
+
+export function parseMvMobileList(input: string): string[] {
+  const cleanInput = input.trim();
+  if (!cleanInput) return [];
+
+  const entries = cleanInput.split(',').map((entry) => entry.trim());
+  if (entries.some((entry) => !entry)) {
+    throw new Error('Remove empty entries from the recipient list.');
+  }
+
+  const normalizedNumbers = entries.map(normalizeMvNumber);
+  const invalidNumbers = [...new Set(normalizedNumbers.filter((number) => !isValidMvMobile(number)))];
+  if (invalidNumbers.length) {
+    throw new Error(`Invalid Maldives mobile number${invalidNumbers.length === 1 ? '' : 's'}: ${invalidNumbers.join(', ')}`);
+  }
+
+  return [...new Set(normalizedNumbers)];
+}

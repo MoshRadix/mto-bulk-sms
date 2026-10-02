@@ -1,2 +1,9 @@
 import { defineConfig } from 'vite';
-export default defineConfig({ base: './', build: { outDir: 'dist' }, server: { port: 5173 } });
+export default defineConfig({
+	base: './',
+	build: { outDir: 'dist' },
+	server: {
+		port: 5173,
+		watch: { usePolling: true, interval: 1000 },
+	},
+});

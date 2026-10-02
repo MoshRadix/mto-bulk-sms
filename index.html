@@ -1,3 +1,42 @@
-<!doctype html><html lang="en"><head><meta charset="UTF-8"/>
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'"/>
-<title>MTO Bulk SMS Manager</title></head><body><div id="root"></div><script type="module" src="/src/main.ts"></script></body></html>
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<link rel="icon" type="image/png" sizes="256x256" href="./assets/addu-city-icon.png" />
+		<link rel="apple-touch-icon" href="./assets/addu-city-icon.png" />
+		<title>MTO Bulk SMS Manager</title>
+		<style>
+			:root { color-scheme: dark; font-family: "Segoe UI", sans-serif; background: #091320; color: #ebf2ff; }
+			* { box-sizing: border-box; }
+			html, body, #root { min-height: 100%; margin: 0; }
+			.boot-screen { min-height: 100vh; display: grid; place-items: center; padding: 24px; background: radial-gradient(ellipse at center, #102435 0%, #091320 58%, #06101a 100%); }
+			.boot-content { display: grid; justify-items: center; gap: 20px; text-align: center; }
+			.boot-spinner { width: 42px; height: 42px; border: 2px solid rgba(34, 211, 238, 0.22); border-top-color: #22d3ee; border-right-color: #3b82f6; border-radius: 50%; animation: boot-spin 0.9s linear infinite; box-shadow: 0 0 20px rgba(34, 211, 238, 0.14); }
+			.boot-title { margin: 0; font-size: 1rem; font-weight: 650; }
+			.boot-caption { margin: 7px 0 0; color: #9fb3c8; font-size: 0.82rem; }
+			.boot-caption::after { content: ''; display: inline-block; width: 16px; text-align: left; animation: boot-dots 1.4s steps(4, end) infinite; }
+			@keyframes boot-spin { to { transform: rotate(360deg); } }
+			@keyframes boot-dots { 0% { content: ''; } 25% { content: '.'; } 50% { content: '..'; } 75%, 100% { content: '...'; } }
+			@media (prefers-reduced-motion: reduce) {
+				.boot-spinner, .boot-caption::after { animation: none; }
+				.boot-spinner { border-top-color: #22d3ee; }
+			}
+		</style>
+	</head>
+	<body>
+		<div id="root">
+			<main class="boot-screen" role="status" aria-live="polite">
+				<div class="boot-content">
+					<span class="boot-spinner" aria-hidden="true"></span>
+					<div>
+						<p class="boot-title">Starting MTO Bulk SMS Manager</p>
+						<p class="boot-caption">Preparing your workspace</p>
+					</div>
+				</div>
+			</main>
+		</div>
+		<script type="module" src="/src/main.ts"></script>
+	</body>
+</html>

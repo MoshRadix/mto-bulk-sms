@@ -20,8 +20,8 @@ const contactSchema = new Schema({
   groupId: { type: Types.ObjectId, ref: 'Group', required: true, index: true },
   createdBy: { type: Types.ObjectId, ref: 'User', required: true },
 }, { ...opts, collection: 'contacts' });
-// Prevent duplicates among non-deleted contacts
-contactSchema.index({ mobile: 1 }, { unique: true, partialFilterExpression: { deletedAt: null } });
+// Prevent duplicate numbers within a group while allowing reuse across groups.
+contactSchema.index({ mobile: 1, groupId: 1 }, { unique: true, partialFilterExpression: { deletedAt: null } });
 contactSchema.index({ name: 'text', department: 'text', designation: 'text' });
 const Contact = model('Contact', contactSchema);
 
@@ -37,7 +37,7 @@ const smsSchema = new Schema({
   submittedAt: Date, deliveredAt: Date, requestXml: String, responseXml: String, // request must be stored with password masked
   createdBy: { type: Types.ObjectId, ref: 'User', index: true },
 }, { ...opts, collection: 'sms_logs' });
-smsSchema.index({ createdAt: -1 });
+smsSchema.index({ createdAt: -1, _id: -1 });
 smsSchema.index({ body: 'text' });
 const SmsLog = model('SmsLog', smsSchema);
 

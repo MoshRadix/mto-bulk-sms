@@ -1,4 +1,4 @@
-import { isValidMvMobile } from './shared/phone';
+import { isValidMvMobile, normalizeMvNumber } from './shared/phone';
 
 export type Contact = {
   id: string;
@@ -21,7 +21,18 @@ export type SmsItem = {
   to: string;
   message: string;
   status: string;
+  groupName?: string | null;
   createdAt?: string | null;
+};
+
+export type SmsCursor = { createdAt: string; id: string };
+
+export type SmsPage = {
+  items: SmsItem[];
+  hasMore: boolean;
+  nextCursor: SmsCursor | null;
+  queuedCount?: number;
+  sentCount?: number;
 };
 
 export type UserRecord = {
@@ -37,6 +48,26 @@ export type DashboardState = {
   contacts: Contact[];
   groups: Group[];
   sms: SmsItem[];
+  smsCursor: SmsCursor | null;
+  smsHasMore: boolean;
+  smsLoading: boolean;
+  queuedSmsCount: number;
+  sentSmsCount: number;
+  smsReport: SmsItem[];
+  smsReportLoaded: boolean;
+  smsReportLoading: boolean;
+  smsReportError: string | null;
+  smsHistoryItems: SmsItem[];
+  smsHistoryPage: number;
+  smsHistoryHasMore: boolean;
+  smsHistoryNextCursor: SmsCursor | null;
+  smsHistoryLoading: boolean;
+  smsHistoryLoaded: boolean;
+  smsHistoryError: string | null;
+  smsHistoryStatus: string;
+  activeSection: 'dashboard' | 'contacts' | 'groups' | 'admin' | 'settings' | 'history' | 'templates';
+  groupEditorId: string;
+  groupEditorMode: 'existing' | 'new';
   users: UserRecord[];
   status: string;
   user: { id: string; username: string; name: string; role: string } | null;
@@ -48,6 +79,26 @@ export const state: DashboardState = {
   contacts: [],
   groups: [],
   sms: [],
+  smsCursor: null,
+  smsHasMore: false,
+  smsLoading: false,
+  queuedSmsCount: 0,
+  sentSmsCount: 0,
+  smsReport: [],
+  smsReportLoaded: false,
+  smsReportLoading: false,
+  smsReportError: null,
+  smsHistoryItems: [],
+  smsHistoryPage: 0,
+  smsHistoryHasMore: false,
+  smsHistoryNextCursor: null,
+  smsHistoryLoading: false,
+  smsHistoryLoaded: false,
+  smsHistoryError: null,
+  smsHistoryStatus: '',
+  activeSection: 'dashboard',
+  groupEditorId: '',
+  groupEditorMode: 'existing',
   users: [],
   status: 'Loading dashboard...',
   user: null,
@@ -55,8 +106,9 @@ export const state: DashboardState = {
   view: 'setup',
 };
 
-export const root = document.getElementById('root');
-if (!root) throw new Error('Root element not found');
+const appRoot = document.getElementById('root');
+if (!appRoot) throw new Error('Root element not found');
+export const root: HTMLElement = appRoot;
 
 declare global {
   interface Window {
@@ -71,5 +123,7 @@ export function apiClient() {
 }
 
 export function getValidContactCount() {
-  return state.contacts.filter((contact) => isValidMvMobile(contact.mobile)).length;
+  return new Set(state.contacts
+    .map((contact) => normalizeMvNumber(contact.mobile))
+    .filter(isValidMvMobile)).size;
 }

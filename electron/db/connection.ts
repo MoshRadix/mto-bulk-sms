@@ -17,6 +17,7 @@ export async function testConnection(): Promise<{ ok: boolean; error?: string }>
 }
 
 export async function initializeCollections(): Promise<void> {
+  await connectDatabase();
   const { models } = await import('./models');
   for (const m of Object.values(models)) { await m.createCollection().catch(() => undefined); await m.syncIndexes(); }
 }

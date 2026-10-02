@@ -11,14 +11,13 @@ describe('preload whitelist', () => {
     expect(src.match(/'[a-z]+:[a-z-]+'/g)?.length).toBe(CHANNELS.length);
   });
 
-  it('includes admin bulk management actions for contacts and groups', () => {
+  it('includes supported admin management actions', () => {
     expect(CHANNELS).toEqual(expect.arrayContaining([
       'contacts:update',
       'contacts:delete',
       'contacts:bulk-delete',
       'groups:update',
       'groups:delete',
-      'groups:bulk-delete',
     ]));
   });
 

@@ -12,6 +12,15 @@ credential store, runtime DB connection (Main process only), secure IPC whitelis
     npx electron .     # second terminal, with VITE_DEV_SERVER_URL=http://localhost:5173
     npm test
 
+## Releasing updates
+Windows packaged builds check GitHub Releases at startup, download newer versions in the background, and prompt to restart when ready. To publish an update:
+
+1. Update the `version` in `package.json`.
+2. Set `GH_TOKEN` to a GitHub token with Contents write access to `MoshRadix/mto-bulk-sms`.
+3. Run `npm run release`.
+
+The release includes the installer and update metadata required by installed apps. Do not publish drafts or prereleases as production updates.
+
 ## Security notes
 - Database and Dhiraagu credentials are entered in the setup wizard, never committed. Rotate any credential that has been shared in plain text.
 - Secrets are encrypted (AES-256-GCM) in electron-store; the master key is in the OS keychain.

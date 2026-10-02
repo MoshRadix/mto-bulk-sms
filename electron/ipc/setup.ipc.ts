@@ -16,6 +16,21 @@ const SmsConfig = z.object({
   sender: z.string().trim().min(1).optional(),
 });
 const LoginInput = z.object({ username: z.string().trim().min(1), password: z.string().min(1) });
+type AuthenticatedUser = { id: string; role: 'administrator' | 'user' };
+const authenticatedUsers = new Map<number, AuthenticatedUser>();
+
+function getAuthenticatedUser(senderId: number): AuthenticatedUser {
+  const user = authenticatedUsers.get(senderId);
+  if (!user) throw new Error('Sign in before managing groups.');
+  return user;
+}
+
+function requireAdministrator(senderId: number): AuthenticatedUser {
+  const user = getAuthenticatedUser(senderId);
+  if (user.role !== 'administrator') throw new Error('Administrator access is required for this action.');
+  return user;
+}
+
 const ContactInput = z.object({
   name: z.string().trim().min(1),
   mobile: z.string().trim().min(1),
@@ -53,7 +68,8 @@ const GroupUpdateInput = z.object({
   id: z.string().trim().min(1),
   name: z.string().trim().min(1).optional(),
   description: z.string().trim().optional().default(''),
-}).refine((value) => Boolean(value.name || value.description), {
+  members: z.array(z.string().trim().min(1)).optional(),
+}).refine((value) => Boolean(value.name || value.description || value.members), {
   message: 'At least one field is required to update a group.',
 });
 const SmsInput = z.object({
@@ -61,20 +77,23 @@ const SmsInput = z.object({
     (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
     z.string().trim().min(1).optional(),
   ),
-  message: z.string().trim().min(1),
+  message: z.string().min(1).refine((value) => value.trim().length > 0, { message: 'Message text is required.' }),
   groupId: z.preprocess(
     (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
     z.string().trim().min(1).optional(),
   ),
-  userId: z.string().trim().optional(),
-  role: z.enum(['administrator', 'user']).optional(),
 }).refine((value) => Boolean(value.groupId || value.to), {
   message: 'Either a direct recipient or a group selection is required.',
 });
 const SmsListInput = z.object({
-  userId: z.string().trim().optional(),
-  role: z.enum(['administrator', 'user']).optional(),
-}).optional();
+  limit: z.number().int().min(1).max(50).default(10),
+  ownOnly: z.boolean().default(false),
+  sentOnly: z.boolean().default(false),
+  cursor: z.object({
+    createdAt: z.string().datetime(),
+    id: z.string().regex(/^[a-f\d]{24}$/i),
+  }).optional(),
+});
 const UserInput = z.object({
   name: z.string().trim().min(1),
   username: z.string().trim().min(1),
@@ -103,6 +122,25 @@ function isValidMvMobile(input: string): boolean {
   return /^960[79]\d{6}$/.test(normalizeMvNumber(input));
 }
 
+function parseDirectSmsRecipients(input: string): string[] {
+  const cleanInput = input.trim();
+  if (!cleanInput) return [];
+
+  const entries = cleanInput.split(',').map((entry) => entry.trim());
+  if (entries.some((entry) => !entry)) throw new Error('Remove empty entries from the recipient list.');
+
+  const numbers = entries.map(normalizeMvNumber);
+  const invalidNumbers = [...new Set(numbers.filter((number) => !isValidMvMobile(number)))];
+  if (invalidNumbers.length) {
+    throw new Error(`Invalid Maldives mobile number${invalidNumbers.length === 1 ? '' : 's'}: ${invalidNumbers.join(', ')}`);
+  }
+  return [...new Set(numbers)];
+}
+
+function isDuplicateKeyError(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && 'code' in error && error.code === 11000;
+}
+
 export function getGroupMemberCount(groupMembers: unknown[] = [], actualMemberIds: unknown[] = []): number {
   if (actualMemberIds.length > 0) return actualMemberIds.length;
   return Array.isArray(groupMembers) ? groupMembers.length : 0;
@@ -116,6 +154,47 @@ async function syncGroupMemberships(models: any, groupId: string | undefined, co
 async function removeContactFromGroup(models: any, groupId: string | undefined, contactId: string) {
   if (!groupId || !contactId) return;
   await models.Group.findByIdAndUpdate(groupId, { $pull: { members: contactId } });
+}
+
+async function saveGroupMembers(models: any, groupId: string, memberIds: string[], createdBy?: unknown): Promise<number> {
+  const selectedIds = new Set(memberIds);
+  const [currentMembers, selectedContacts] = await Promise.all([
+    models.Contact.find({ groupId, deletedAt: null }).lean(),
+    models.Contact.find({ _id: { $in: memberIds }, deletedAt: null }).lean(),
+  ]);
+  const removedMembers = currentMembers.filter((contact: any) => !selectedIds.has(String(contact._id)));
+  const keptMembers = currentMembers.filter((contact: any) => selectedIds.has(String(contact._id)));
+
+  if (removedMembers.length) {
+    const removedIds = removedMembers.map((contact: any) => contact._id);
+    await models.Contact.updateMany({ _id: { $in: removedIds } }, { $set: { deletedAt: new Date() } });
+    await models.Group.updateOne({ _id: groupId }, { $pull: { members: { $in: removedIds } } });
+  }
+
+  const memberNumbers = new Set(keptMembers.map((contact: any) => contact.mobile));
+  const savedMemberIds = keptMembers.map((contact: any) => contact._id);
+  for (const contact of selectedContacts) {
+    if (String(contact.groupId) === groupId || memberNumbers.has(contact.mobile)) continue;
+
+    try {
+      const copy = await models.Contact.create({
+        name: contact.name,
+        mobile: contact.mobile,
+        department: contact.department ?? '',
+        designation: contact.designation ?? '',
+        notes: contact.notes ?? '',
+        groupId,
+        createdBy: createdBy ?? contact.createdBy,
+      });
+      memberNumbers.add(copy.mobile);
+      savedMemberIds.push(copy._id);
+    } catch (error) {
+      if (!isDuplicateKeyError(error)) throw error;
+    }
+  }
+
+  await models.Group.updateOne({ _id: groupId }, { $set: { members: savedMemberIds } });
+  return savedMemberIds.length;
 }
 
 function escapeXml(value: string): string {
@@ -301,7 +380,7 @@ export function registerSetupIpc() {
     return { ok: true };
   });
 
-  ipcMain.handle('auth:login', async (_e, raw) => {
+  ipcMain.handle('auth:login', async (event, raw) => {
     const { username, password } = LoginInput.parse(raw);
     await ensureDbReady();
     const { models } = await import('../db/models');
@@ -309,11 +388,18 @@ export function registerSetupIpc() {
     if (!user || !user.active) throw new Error('Invalid username or password');
     const match = await bcrypt.compare(password, user.passwordHash);
     if (!match) throw new Error('Invalid username or password');
-    return {
+    const authenticatedUser: AuthenticatedUser = {
       id: String(user._id),
+      role: user.role === 'administrator' ? 'administrator' : 'user',
+    };
+    const senderId = event.sender.id;
+    authenticatedUsers.set(senderId, authenticatedUser);
+    event.sender.once('destroyed', () => authenticatedUsers.delete(senderId));
+    return {
+      id: authenticatedUser.id,
       name: user.name,
       username: user.username,
-      role: user.role,
+      role: authenticatedUser.role,
     };
   });
 
@@ -344,17 +430,26 @@ export function registerSetupIpc() {
 
     const group = await models.Group.findById(c.groupId).lean();
     if (!group) throw new Error('Selected group was not found.');
+    if (await models.Contact.exists({ mobile, groupId: group._id, deletedAt: null })) {
+      throw new Error('This mobile number already exists in the selected group.');
+    }
 
     const adminUser = await models.User.findOne({ username: 'admin' });
-    const doc = await models.Contact.create({
-      name: c.name,
-      mobile,
-      department: c.department,
-      designation: c.designation,
-      notes: c.notes,
-      groupId: group._id,
-      createdBy: adminUser?._id,
-    });
+    let doc;
+    try {
+      doc = await models.Contact.create({
+        name: c.name,
+        mobile,
+        department: c.department,
+        designation: c.designation,
+        notes: c.notes,
+        groupId: group._id,
+        createdBy: adminUser?._id,
+      });
+    } catch (error) {
+      if (isDuplicateKeyError(error)) throw new Error('This mobile number already exists in the selected group.');
+      throw error;
+    }
 
     await syncGroupMemberships(models, String(group._id), String(doc._id));
 
@@ -374,17 +469,26 @@ export function registerSetupIpc() {
     const groupId = c.groupId ? c.groupId : existing.groupId ? String(existing.groupId) : '';
     const group = groupId ? await models.Group.findById(groupId).lean() : null;
     if (!group) throw new Error('Selected group was not found.');
+    if (await models.Contact.exists({ _id: { $ne: existing._id }, mobile, groupId: group._id, deletedAt: null })) {
+      throw new Error('This mobile number already exists in the selected group.');
+    }
 
-    const doc = await models.Contact.findByIdAndUpdate(c.id, {
-      $set: {
-        name: c.name ?? existing.name,
-        mobile,
-        department: c.department ?? existing.department ?? '',
-        designation: c.designation ?? existing.designation ?? '',
-        notes: c.notes ?? existing.notes ?? '',
-        groupId: group._id,
-      },
-    }, { new: true }).lean();
+    let doc;
+    try {
+      doc = await models.Contact.findByIdAndUpdate(c.id, {
+        $set: {
+          name: c.name ?? existing.name,
+          mobile,
+          department: c.department ?? existing.department ?? '',
+          designation: c.designation ?? existing.designation ?? '',
+          notes: c.notes ?? existing.notes ?? '',
+          groupId: group._id,
+        },
+      }, { new: true }).lean();
+    } catch (error) {
+      if (isDuplicateKeyError(error)) throw new Error('This mobile number already exists in the selected group.');
+      throw error;
+    }
 
     if (!doc) throw new Error('Contact not found.');
 
@@ -425,13 +529,21 @@ export function registerSetupIpc() {
     const { models } = await import('../db/models');
     const adminUser = await models.User.findOne({ username: 'admin' });
     const results: Array<{ id: string; name: string; mobile: string; groupId: string }> = [];
-
-    for (const row of rows) {
+    const skippedNumbers: string[] = [];
+    const normalizedRows = rows.map((row) => {
       const mobile = normalizeMvNumber(row.mobile);
       if (!isValidMvMobile(mobile)) {
         throw new Error(`Invalid mobile number for ${row.name || 'unknown contact'}: ${row.mobile}`);
       }
+      return { row, mobile };
+    });
+    const existing = await models.Contact.find({
+      mobile: { $in: normalizedRows.map(({ mobile }) => mobile) },
+      deletedAt: null,
+    }).select('mobile groupId').lean();
+    const seenGroupNumbers = new Set(existing.map((contact) => `${String(contact.groupId)}:${contact.mobile}`));
 
+    for (const { row, mobile } of normalizedRows) {
       const group = row.groupId
         ? await models.Group.findById(row.groupId).lean()
         : await models.Group.findOne({ name: String(row.groupName ?? '').trim(), deletedAt: null }).lean();
@@ -440,27 +552,37 @@ export function registerSetupIpc() {
         throw new Error(`Group not found for contact ${row.name}; provide a valid group name or groupId.`);
       }
 
-      const doc = await models.Contact.findOneAndUpdate(
-        { mobile, deletedAt: null },
-        {
-          $set: {
-            name: row.name,
-            mobile,
-            department: row.department ?? '',
-            designation: row.designation ?? '',
-            notes: row.notes ?? '',
-            groupId: group._id,
-            createdBy: adminUser?._id ?? undefined,
-          },
-        },
-        { upsert: true, new: true, setDefaultsOnInsert: true },
-      );
+      const groupNumberKey = `${String(group._id)}:${mobile}`;
+      if (seenGroupNumbers.has(groupNumberKey)) {
+        skippedNumbers.push(mobile);
+        continue;
+      }
+      seenGroupNumbers.add(groupNumberKey);
+
+      let doc;
+      try {
+        doc = await models.Contact.create({
+          name: row.name,
+          mobile,
+          department: row.department ?? '',
+          designation: row.designation ?? '',
+          notes: row.notes ?? '',
+          groupId: group._id,
+          createdBy: adminUser?._id,
+        });
+      } catch (error) {
+        if (isDuplicateKeyError(error)) {
+          skippedNumbers.push(mobile);
+          continue;
+        }
+        throw error;
+      }
 
       await models.Group.findByIdAndUpdate(group._id, { $addToSet: { members: doc._id } });
       results.push({ id: String(doc._id), name: doc.name, mobile: doc.mobile, groupId: String(doc.groupId) });
     }
 
-    return { count: results.length, rows: results };
+    return { count: results.length, skippedDuplicates: skippedNumbers.length, skippedNumbers, rows: results };
   });
 
   ipcMain.handle('groups:list', async () => {
@@ -486,7 +608,8 @@ export function registerSetupIpc() {
     }));
   });
 
-  ipcMain.handle('groups:create', async (_e, raw) => {
+  ipcMain.handle('groups:create', async (event, raw) => {
+    requireAdministrator(event.sender.id);
     const c = GroupInput.parse(raw);
     await ensureDbReady();
     const { models } = await import('../db/models');
@@ -494,30 +617,42 @@ export function registerSetupIpc() {
     const doc = await models.Group.create({
       name: c.name,
       description: c.description,
-      members: c.members,
+      members: [],
       createdBy: adminUser?._id,
     });
-    return { id: String(doc._id), name: doc.name, description: doc.description ?? '', memberCount: doc.members.length };
+    const memberCount = await saveGroupMembers(models, String(doc._id), c.members, adminUser?._id);
+    return { id: String(doc._id), name: doc.name, description: doc.description ?? '', memberCount };
   });
 
-  ipcMain.handle('groups:update', async (_e, raw) => {
+  ipcMain.handle('groups:update', async (event, raw) => {
+    const user = getAuthenticatedUser(event.sender.id);
+    const updatesDetails = typeof raw === 'object' && raw !== null && ('name' in raw || 'description' in raw);
+    if (updatesDetails && user.role !== 'administrator') {
+      throw new Error('Administrator access is required to change group details.');
+    }
     const c = GroupUpdateInput.parse(raw);
     await ensureDbReady();
     const { models } = await import('../db/models');
     const existing = await models.Group.findById(c.id).lean();
     if (!existing) throw new Error('Group not found.');
 
-    const doc = await models.Group.findByIdAndUpdate(c.id, {
-      $set: {
-        name: c.name ?? existing.name,
-        description: c.description ?? existing.description ?? '',
-      },
-    }, { new: true }).lean();
+    const doc = updatesDetails
+      ? await models.Group.findByIdAndUpdate(c.id, {
+          $set: {
+            name: c.name ?? existing.name,
+            description: c.description ?? existing.description ?? '',
+          },
+        }, { new: true }).lean()
+      : existing;
     if (!doc) throw new Error('Group not found.');
-    return { id: String(doc._id), name: doc.name, description: doc.description ?? '', memberCount: Array.isArray(doc.members) ? doc.members.length : 0 };
+    const memberCount = c.members
+      ? await saveGroupMembers(models, String(doc._id), c.members)
+      : await models.Contact.countDocuments({ groupId: doc._id, deletedAt: null });
+    return { id: String(doc._id), name: doc.name, description: doc.description ?? '', memberCount };
   });
 
-  ipcMain.handle('groups:delete', async (_e, raw) => {
+  ipcMain.handle('groups:delete', async (event, raw) => {
+    requireAdministrator(event.sender.id);
     const { id } = z.object({ id: z.string().trim().min(1) }).parse(raw);
     await ensureDbReady();
     const { models } = await import('../db/models');
@@ -528,17 +663,6 @@ export function registerSetupIpc() {
     group.deletedAt = new Date();
     await group.save();
     return { ok: true };
-  });
-
-  ipcMain.handle('groups:bulk-delete', async (_e, raw) => {
-    const { ids } = z.object({ ids: z.array(z.string().trim().min(1)) }).parse(raw ?? { ids: [] });
-    await ensureDbReady();
-    const { models } = await import('../db/models');
-    const groups = await models.Group.find({ _id: { $in: ids }, deletedAt: null }).lean();
-    const memberIds = groups.flatMap((group) => Array.isArray(group.members) ? group.members.map((member) => String(member)) : []);
-    await models.Contact.updateMany({ _id: { $in: memberIds } }, { $set: { deletedAt: new Date() } });
-    await models.Group.updateMany({ _id: { $in: groups.map((group) => group._id) } }, { $set: { deletedAt: new Date() } });
-    return { count: groups.length };
   });
 
   ipcMain.handle('users:list', async () => {
@@ -616,47 +740,90 @@ export function registerSetupIpc() {
     return { ok: true };
   });
 
-  ipcMain.handle('sms:list', async (_e, raw) => {
+  ipcMain.handle('sms:list', async (event, raw) => {
     const input = SmsListInput.parse(raw ?? {});
+    const authenticatedUser = getAuthenticatedUser(event.sender.id);
     await ensureDbReady();
     const { models } = await import('../db/models');
     const filter: Record<string, unknown> = { deletedAt: null };
-    if (input?.role !== 'administrator' && input?.userId) {
-      filter.createdBy = input.userId;
+    if (authenticatedUser.role !== 'administrator' || input.ownOnly) filter.createdBy = authenticatedUser.id;
+    if (input.sentOnly) filter.status = { $in: ['submitted', 'processing', 'delivered'] };
+    if (input.cursor) {
+      const cursorDate = new Date(input.cursor.createdAt);
+      filter.$or = [
+        { createdAt: { $lt: cursorDate } },
+        { createdAt: cursorDate, _id: { $lt: input.cursor.id } },
+      ];
     }
-    const items = await models.SmsLog.find(filter).sort({ createdAt: -1 }).lean();
-    return items.map((item) => ({
-      id: String(item._id),
-      to: item.mobile,
-      message: item.body,
-      status: item.status,
-      contactName: item.contactName ?? '',
-      createdAt: item.createdAt ? new Date(item.createdAt).toISOString() : null,
-    }));
+    const documents = await models.SmsLog.find(filter)
+      .sort({ createdAt: -1, _id: -1 })
+      .limit(input.limit + 1)
+      .lean();
+    const hasMore = documents.length > input.limit;
+    const items = documents.slice(0, input.limit);
+    const lastItem = items.at(-1);
+    const queuedCount = input.cursor
+      ? undefined
+      : await models.SmsLog.countDocuments({ ...filter, status: 'queued' });
+    const sentCount = input.cursor
+      ? undefined
+      : await models.SmsLog.countDocuments({
+          deletedAt: null,
+          createdBy: authenticatedUser.id,
+          status: { $in: ['submitted', 'processing', 'delivered'] },
+        });
+    return {
+      items: items.map((item) => ({
+        id: String(item._id),
+        to: item.mobile,
+        message: item.body,
+        status: item.status,
+        contactName: item.contactName ?? '',
+        groupName: item.groupName ?? null,
+        createdAt: item.createdAt ? new Date(item.createdAt).toISOString() : null,
+      })),
+      hasMore,
+      nextCursor: hasMore && lastItem?.createdAt
+        ? { createdAt: new Date(lastItem.createdAt).toISOString(), id: String(lastItem._id) }
+        : null,
+      ...(queuedCount === undefined ? {} : { queuedCount }),
+      ...(sentCount === undefined ? {} : { sentCount }),
+    };
   });
 
-  ipcMain.handle('sms:queue', async (_e, raw) => {
+  ipcMain.handle('sms:queue', async (event, raw) => {
+    const authenticatedUser = getAuthenticatedUser(event.sender.id);
     const c = SmsInput.parse(raw);
+    if (Array.from(c.message).length > 1530) {
+      throw new Error('SMS message cannot exceed 1,530 characters.');
+    }
     await ensureDbReady();
     const { models } = await import('../db/models');
-    const currentUserId = c.role === 'administrator' ? undefined : c.userId;
+    const currentUserId = authenticatedUser.id;
+    const group = c.groupId
+      ? await models.Group.findOne({ _id: c.groupId, deletedAt: null }).lean()
+      : null;
+    if (c.groupId && !group) throw new Error('Selected group was not found.');
 
-    const contacts = c.groupId
-      ? await models.Contact.find({ groupId: c.groupId, deletedAt: null }).lean()
-      : c.to
-        ? await models.Contact.find({ mobile: normalizeMvNumber(c.to), deletedAt: null }).lean()
-        : [];
+    const recipients = c.groupId
+      ? (await models.Contact.find({ groupId: group!._id, deletedAt: null }).lean())
+          .map((contact) => ({ mobile: contact.mobile, name: contact.name ?? '' }))
+      : await (async () => {
+          const numbers = parseDirectSmsRecipients(c.to ?? '');
+          const savedContacts = await models.Contact.find({ mobile: { $in: numbers }, deletedAt: null }).select('mobile name').lean();
+          const namesByNumber = new Map(savedContacts.map((contact) => [contact.mobile, contact.name ?? '']));
+          return numbers.map((mobile) => ({ mobile, name: namesByNumber.get(mobile) ?? '' }));
+        })();
 
-    if (!contacts.length) {
-      throw new Error(c.groupId ? 'No contacts were found in the selected group.' : 'No contact matches the provided mobile number.');
-    }
+    if (!recipients.length) throw new Error('No contacts were found in the selected group.');
 
     const created = await Promise.all(
-      contacts.map(async (contact) => {
+      recipients.map(async (recipient) => {
         const doc = await models.SmsLog.create({
-          mobile: contact.mobile,
+          mobile: recipient.mobile,
           body: c.message,
-          contactName: contact.name,
+          contactName: recipient.name,
+          groupName: group?.name,
           status: 'queued',
           createdBy: currentUserId ?? undefined,
         });
@@ -706,8 +873,8 @@ export function registerSetupIpc() {
     }
   });
 
-  ipcMain.handle('sms:send', async (_e, raw) => {
-    const input = SmsListInput.parse(raw ?? {});
+  ipcMain.handle('sms:send', async (event) => {
+    const authenticatedUser = getAuthenticatedUser(event.sender.id);
     await ensureDbReady();
     const auth = await getDhiraaguAuthRecord();
     const user = auth?.user?.trim();
@@ -717,11 +884,10 @@ export function registerSetupIpc() {
 
     const { models } = await import('../db/models');
     const queueFilter: Record<string, unknown> = { status: 'queued', deletedAt: null };
-    if (input?.role !== 'administrator' && input?.userId) {
-      queueFilter.createdBy = input.userId;
-    }
+    if (authenticatedUser.role !== 'administrator') queueFilter.createdBy = authenticatedUser.id;
     const queued = await models.SmsLog.find(queueFilter).sort({ createdAt: 1 }).lean();
     let sentCount = 0;
+    const sentMessages: Array<{ id: string; to: string; message: string; status: string; groupName: string | null; createdAt: string | null }> = [];
 
     for (const item of queued) {
     let requestXml = '';
@@ -747,6 +913,14 @@ export function registerSetupIpc() {
           { $set: { status: 'submitted', messageId: parsed.messageId, messageKey: parsed.messageKey, requestXml, responseXml, submittedAt: new Date() } },
         );
         sentCount += 1;
+        sentMessages.push({
+          id: String(item._id),
+          to: item.mobile,
+          message: item.body,
+          status: 'submitted',
+          groupName: item.groupName ?? null,
+          createdAt: item.createdAt ? new Date(item.createdAt).toISOString() : null,
+        });
         lastError = null;
         break;
       } catch (error) {
@@ -763,6 +937,6 @@ export function registerSetupIpc() {
     }
   }
 
-    return sentCount;
+    return { sentCount, sentMessages };
   });
 }

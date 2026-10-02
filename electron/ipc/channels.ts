@@ -18,7 +18,6 @@ export const CHANNELS = [
   'groups:create',
   'groups:update',
   'groups:delete',
-  'groups:bulk-delete',
   'users:list',
   'users:create',
   'users:update',

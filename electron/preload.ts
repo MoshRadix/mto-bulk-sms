@@ -8,7 +8,7 @@ import { contextBridge, ipcRenderer } from 'electron';
 const CHANNELS: readonly string[] = [
   'setup:status', 'setup:test-db', 'setup:save-db', 'setup:init-db', 'setup:bootstrap',
   'settings:get-sms-provider', 'settings:save-sms-provider',
-  'auth:login', 'contacts:list', 'contacts:create', 'contacts:update', 'contacts:delete', 'contacts:bulk-delete', 'contacts:import', 'groups:list', 'groups:create', 'groups:update', 'groups:delete', 'groups:bulk-delete',
+  'auth:login', 'contacts:list', 'contacts:create', 'contacts:update', 'contacts:delete', 'contacts:bulk-delete', 'contacts:import', 'groups:list', 'groups:create', 'groups:update', 'groups:delete',
   'users:list', 'users:create', 'users:update', 'users:delete',
   'sms:list', 'sms:queue', 'sms:send', 'sms:test-connection',
 ];

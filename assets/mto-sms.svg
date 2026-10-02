@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#102b3a" />
+      <stop offset="1" stop-color="#07131f" />
+    </linearGradient>
+    <linearGradient id="bubble" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#22d3ee" />
+      <stop offset="1" stop-color="#2563eb" />
+    </linearGradient>
+  </defs>
+  <rect width="256" height="256" rx="54" fill="url(#background)" />
+  <path d="M45 69c0-14 11-25 25-25h116c14 0 25 11 25 25v91c0 14-11 25-25 25h-59l-43 34v-34H70c-14 0-25-11-25-25z" fill="url(#bubble)" />
+  <path d="M71 90h114M71 116h114M71 142h72" fill="none" stroke="#f0fdff" stroke-linecap="round" stroke-width="12" />
+  <circle cx="183" cy="184" r="29" fill="#0b1c2a" stroke="#22d3ee" stroke-width="5" />
+  <text x="183" y="191" fill="#e0faff" font-family="Segoe UI, Arial, sans-serif" font-size="19" font-weight="800" text-anchor="middle">SMS</text>
+</svg>
