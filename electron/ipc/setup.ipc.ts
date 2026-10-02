@@ -885,11 +885,18 @@ export function registerSetupIpc() {
     const { models } = await import('../db/models');
     const queueFilter: Record<string, unknown> = { status: 'queued', deletedAt: null };
     if (authenticatedUser.role !== 'administrator') queueFilter.createdBy = authenticatedUser.id;
-    const queued = await models.SmsLog.find(queueFilter).sort({ createdAt: 1 }).lean();
+    const queued = await models.SmsLog.find(queueFilter).sort({ createdAt: 1 }).select('_id').lean();
     let sentCount = 0;
     const sentMessages: Array<{ id: string; to: string; message: string; status: string; groupName: string | null; createdAt: string | null }> = [];
 
-    for (const item of queued) {
+    for (const queuedItem of queued) {
+    const item = await models.SmsLog.findOneAndUpdate(
+      { _id: queuedItem._id, ...queueFilter },
+      { $set: { status: 'sending' } },
+      { new: true },
+    ).lean();
+    if (!item) continue;
+
     let requestXml = '';
     let responseXml = '';
     let lastError: Error | null = null;
@@ -909,7 +916,7 @@ export function registerSetupIpc() {
 
         const parsed = parseDhiraaguStatus(responseXml);
         await models.SmsLog.updateOne(
-          { _id: item._id },
+          { _id: item._id, status: 'sending' },
           { $set: { status: 'submitted', messageId: parsed.messageId, messageKey: parsed.messageKey, requestXml, responseXml, submittedAt: new Date() } },
         );
         sentCount += 1;
@@ -931,7 +938,7 @@ export function registerSetupIpc() {
 
     if (lastError) {
       await models.SmsLog.updateOne(
-        { _id: item._id },
+        { _id: item._id, status: 'sending' },
         { $set: { status: 'failed', requestXml, responseXml: lastError.message || 'Unknown SMS error' } },
       );
     }
