@@ -2197,9 +2197,13 @@ export function renderDashboard() {
         notifyStatus(document.getElementById('sms-status'), 'Demo SMS jobs marked as delivered.', 'success');
         return;
       }
-      const count = await appApi.invoke('sms:send');
+      const result = await appApi.invoke('sms:send') as { sentCount: number; sentMessages: SmsItem[] };
       await loadDashboardData();
-      notifyStatus(document.getElementById('sms-status'), `${count} queued SMS jobs sent successfully.`, 'success');
+      const sentCount = result.sentCount ?? 0;
+      const message = sentCount === 0
+        ? 'No queued SMS messages were sent.'
+        : `${sentCount} queued SMS message${sentCount === 1 ? '' : 's'} sent successfully.`;
+      notifyStatus(document.getElementById('sms-status'), message, sentCount ? 'success' : 'info');
     } catch (error) {
       notifyStatus(status, error instanceof Error ? error.message : 'Unable to send queued SMS.', 'error');
     }
