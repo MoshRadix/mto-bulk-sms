@@ -10,7 +10,7 @@ import { renderIcons } from './shared/icons';
 import packageInfo from '../package.json';
 
 /** The dashboard owns rendering and event binding for all authenticated workspace sections. */
-const SMS_PAGE_SIZE = 10;
+const SMS_PAGE_SIZE = 6;
 const SMS_HISTORY_PAGE_SIZE = 20;
 let localSmsTemplates: LocalSmsTemplate[] = [];
 let localSmsTemplatesUserId = '';
@@ -643,7 +643,7 @@ export function renderDashboard() {
       #sms-log-list { max-height: min(64vh, 620px); overflow-x: hidden; overflow-y: auto; padding-right: 8px; }
       .sms-log-message { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; word-break: break-word; }
       .sms-log-message strong, .sms-log-message .muted { overflow-wrap: anywhere; word-break: break-word; }
-      .sms-log-excerpt { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+      .sms-log-excerpt { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 1; overflow: hidden; }
       .sms-log-meta { display: flex; flex: 0 0 auto; flex-direction: column; align-items: flex-end; gap: 6px; white-space: nowrap; }
       .history-page { margin-top: 20px; }
       .history-header { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 4px 0 22px; border-bottom: 1px solid var(--line); }
@@ -1052,7 +1052,7 @@ export function renderDashboard() {
                     .join('')
                 : '<li><span class="muted">No SMS jobs queued.</span></li>'}
             </ul>
-            ${state.smsHasMore ? '<button type="button" class="secondary" id="load-more-sms" style="margin-top: 12px;"><i data-lucide="chevron-down"></i>Load 10 more</button>' : ''}
+            ${state.smsHasMore ? `<button type="button" class="secondary" id="load-more-sms" style="margin-top: 12px;"><i data-lucide="chevron-down"></i>Load ${SMS_PAGE_SIZE} more</button>` : ''}
           </div>
         </div>
       </div>
@@ -1450,6 +1450,31 @@ export function renderDashboard() {
           <h2>Settings</h2>
 
           <div class="settings-stack">
+            <div class="settings-pane" data-pane="password">
+              <h3>Change password</h3>
+              <p class="muted" style="margin: -8px 0 16px; font-size: 0.84rem;">Confirm your current password and choose a new password of at least 12 characters.</p>
+              <form id="change-password-form" class="stack" autocomplete="off">
+                <div>
+                  <label for="current-password">Current password</label>
+                  <input id="current-password" name="currentPassword" type="password" autocomplete="current-password" required />
+                </div>
+                <div class="row">
+                  <div>
+                    <label for="new-password">New password</label>
+                    <input id="new-password" name="newPassword" type="password" autocomplete="new-password" minlength="12" required />
+                  </div>
+                  <div>
+                    <label for="confirm-password">Confirm new password</label>
+                    <input id="confirm-password" name="confirmPassword" type="password" autocomplete="new-password" minlength="12" required />
+                  </div>
+                </div>
+                <div class="actions">
+                  <button type="submit"><i data-lucide="shield-check"></i>Update password</button>
+                </div>
+              </form>
+              <p class="muted" id="change-password-status" role="status" aria-live="polite"></p>
+            </div>
+
             <div class="settings-pane" data-pane="database">
               <h3>Database</h3>
               <form id="setup-form" class="stack">

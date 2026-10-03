@@ -5,6 +5,7 @@ export const CHANNELS = [
   'setup:save-db',
   'setup:init-db',
   'setup:bootstrap',
+  'auth:change-password',
   'settings:get-sms-provider',
   'settings:save-sms-provider',
   'auth:login',

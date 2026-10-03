@@ -8,6 +8,38 @@ export function bindSettingsTabs() {
 
 export function attachSettingsHandlers() {
   // Settings results are mirrored into the app-wide toast and the local status region for accessibility.
+  document.getElementById('change-password-form')?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const form = event.currentTarget as HTMLFormElement;
+    const formData = new FormData(form);
+    const currentPassword = String(formData.get('currentPassword') ?? '');
+    const newPassword = String(formData.get('newPassword') ?? '');
+    const confirmPassword = String(formData.get('confirmPassword') ?? '');
+    const status = document.getElementById('change-password-status');
+
+    if (newPassword.length < 12) {
+      notifyStatus(status, 'New password must contain at least 12 characters.', 'error');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      notifyStatus(status, 'The new password and confirmation do not match.', 'error');
+      return;
+    }
+
+    const appApi = apiClient();
+    if (!appApi) {
+      notifyStatus(status, 'Password changes are only available in the Electron app.', 'error');
+      return;
+    }
+    try {
+      await appApi.invoke('auth:change-password', { currentPassword, newPassword });
+      form.reset();
+      notifyStatus(status, 'Your password has been updated.', 'success');
+    } catch (error) {
+      notifyStatus(status, error instanceof Error ? error.message : 'Unable to change your password.', 'error');
+    }
+  });
+
   document.getElementById('setup-form')?.addEventListener('submit', async (event) => {
     event.preventDefault();
     const form = event.currentTarget as HTMLFormElement;

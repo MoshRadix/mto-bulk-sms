@@ -1,4 +1,4 @@
-import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
+import { createCipheriv, createDecipheriv, createHmac, randomBytes } from 'crypto';
 
 const ALGO = 'aes-256-gcm';
 const IV_LEN = 12;
@@ -21,6 +21,16 @@ export function decrypt(payload: string, key: Buffer): string {
   const decipher = createDecipheriv(ALGO, key, iv);
   decipher.setAuthTag(tag);
   return Buffer.concat([decipher.update(data), decipher.final()]).toString('utf8');
+}
+
+/** Derive an AES key that only matches when both the keychain secret and machine ID match. */
+export function deriveMachineKey(key: Buffer, machineId: string): Buffer {
+  if (key.length !== 32) throw new Error('Key must be 32 bytes');
+  if (!machineId) throw new Error('Machine ID is required');
+  return createHmac('sha256', key)
+    .update('mto-bulk-sms-machine-bound-v2\0')
+    .update(machineId)
+    .digest();
 }
 
 export const generateKey = (): Buffer => randomBytes(32);

@@ -21,7 +21,8 @@ The release includes the installer and update metadata required by installed app
 
 ## Security notes
 - Database and Dhiraagu credentials are entered in the setup wizard, never committed. Rotate any credential that has been shared in plain text.
-- Secrets are encrypted (AES-256-GCM) in electron-store; the master key is in the OS keychain.
+- Secrets are encrypted (AES-256-GCM) in electron-store; the random master key is in the OS keychain and is HMAC-derived with the machine ID. Copying the settings file to another PC will not decrypt it.
+- Existing pre-machine-bound secrets are re-encrypted on first read. If the OS keychain is cleared or the machine is replaced, enter the database and SMS-provider credentials again.
 - Renderer has no Node access; only whitelisted IPC channels (electron/ipc/channels.ts).
 - Known limitation of this architecture: the Atlas credential is present on each installed machine. Give the Atlas user minimal roles and use an IP allow-list.
 

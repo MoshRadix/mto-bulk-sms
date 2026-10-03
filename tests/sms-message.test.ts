@@ -18,5 +18,6 @@ describe('SMS message length', () => {
   it('shows a short message fully and truncates longer log excerpts', () => {
     expect(createSmsExcerpt('Short message')).toBe('Short message');
     expect(createSmsExcerpt('x'.repeat(SMS_LOG_EXCERPT_LIMIT + 1))).toBe(`${'x'.repeat(SMS_LOG_EXCERPT_LIMIT)}...`);
+    expect(createSmsExcerpt('x'.repeat(50))).toHaveLength(SMS_LOG_EXCERPT_LIMIT + 3);
   });
 });

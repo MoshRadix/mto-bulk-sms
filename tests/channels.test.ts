@@ -14,6 +14,7 @@ describe('preload whitelist', () => {
 
   it('includes supported admin management actions', () => {
     expect(CHANNELS).toEqual(expect.arrayContaining([
+      'auth:change-password',
       'contacts:update',
       'contacts:delete',
       'contacts:bulk-delete',

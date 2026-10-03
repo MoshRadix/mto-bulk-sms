@@ -23,6 +23,10 @@ const SmsConfig = z.object({
   sender: z.string().trim().min(1).optional(),
 });
 const LoginInput = z.object({ username: z.string().trim().min(1), password: z.string().min(1) });
+const ChangePasswordInput = z.object({
+  currentPassword: z.string().min(1),
+  newPassword: z.string().min(12),
+});
 type AuthenticatedUser = { id: string; role: 'administrator' | 'user' };
 const authenticatedUsers = new Map<number, AuthenticatedUser>();
 
@@ -442,6 +446,24 @@ export function registerSetupIpc() {
       username: user.username,
       role: authenticatedUser.role,
     };
+  });
+
+  ipcMain.handle('auth:change-password', async (event, raw) => {
+    const { currentPassword, newPassword } = ChangePasswordInput.parse(raw);
+    const sessionUser = getAuthenticatedUser(event.sender.id);
+    await ensureDbReady();
+    const { models } = await import('../db/models');
+    const user = await models.User.findOne({ _id: sessionUser.id, active: true, deletedAt: null });
+    if (!user || !(await bcrypt.compare(currentPassword, user.passwordHash))) {
+      throw new Error('Current password is incorrect.');
+    }
+    if (await bcrypt.compare(newPassword, user.passwordHash)) {
+      throw new Error('Choose a new password that differs from your current password.');
+    }
+
+    user.passwordHash = await bcrypt.hash(newPassword, 12);
+    await user.save();
+    return { ok: true };
   });
 
   // Contact CRUD and CSV import keep validation and persistence in the main process.

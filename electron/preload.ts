@@ -6,7 +6,7 @@ import { contextBridge, ipcRenderer } from 'electron';
  * tests/channels.test.ts keeps it in sync with electron/ipc/channels.ts.
  */
 const CHANNELS: readonly string[] = [
-  'setup:status', 'setup:test-db', 'setup:save-db', 'setup:init-db', 'setup:bootstrap',
+  'setup:status', 'setup:test-db', 'setup:save-db', 'setup:init-db', 'setup:bootstrap', 'auth:change-password',
   'settings:get-sms-provider', 'settings:save-sms-provider',
   'auth:login', 'contacts:list', 'contacts:create', 'contacts:update', 'contacts:delete', 'contacts:bulk-delete', 'contacts:import', 'groups:list', 'groups:create', 'groups:update', 'groups:delete',
   'users:list', 'users:create', 'users:update', 'users:delete',

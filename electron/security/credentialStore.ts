@@ -1,13 +1,15 @@
 import Store from 'electron-store';
 import keytar from 'keytar';
-import { decrypt, encrypt, generateKey } from './crypto';
+import { machineIdSync } from 'node-machine-id';
+import { decrypt, deriveMachineKey, encrypt, generateKey } from './crypto';
 
 const SERVICE = 'MTOBulkSMSManager';
 const KEY_ACCOUNT = 'master-key';
+const MACHINE_BOUND_PREFIX = 'v2:';
 
 /**
- * Secrets are AES-256-GCM encrypted in electron-store; the master key lives
- * in the OS keychain via keytar. Only ever used from the Main process.
+ * Secrets are AES-256-GCM encrypted in electron-store; random key material lives
+ * in the OS keychain and is HMAC-derived with the current machine ID. Only used in Main.
  */
 const store = new Store<Record<string, string>>({ name: 'secure-config' });
 
@@ -19,13 +21,26 @@ async function masterKey(): Promise<Buffer> {
   return key;
 }
 
+async function machineBoundKey(): Promise<Buffer> {
+  return deriveMachineKey(await masterKey(), machineIdSync());
+}
+
 export async function saveSecret(name: string, value: string): Promise<void> {
-  store.set(name, encrypt(value, await masterKey()));
+  store.set(name, `${MACHINE_BOUND_PREFIX}${encrypt(value, await machineBoundKey())}`);
 }
 
 export async function loadSecret(name: string): Promise<string | null> {
   const raw = store.get(name);
-  return raw ? decrypt(raw, await masterKey()) : null;
+  if (!raw) return null;
+
+  if (raw.startsWith(MACHINE_BOUND_PREFIX)) {
+    return decrypt(raw.slice(MACHINE_BOUND_PREFIX.length), await machineBoundKey());
+  }
+
+  // Re-encrypt legacy values on read; the keychain master key remains unchanged for migration.
+  const legacyValue = decrypt(raw, await masterKey());
+  await saveSecret(name, legacyValue);
+  return legacyValue;
 }
 
 export const hasSecret = (name: string): boolean => store.has(name);
