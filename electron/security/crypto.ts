@@ -13,6 +13,7 @@ export function encrypt(plain: string, key: Buffer): string {
 }
 
 export function decrypt(payload: string, key: Buffer): string {
+  // Keep this layout in sync with encrypt(): 12-byte IV, 16-byte GCM tag, then ciphertext.
   const buf = Buffer.from(payload, 'base64');
   const iv = buf.subarray(0, IV_LEN);
   const tag = buf.subarray(IV_LEN, IV_LEN + 16);

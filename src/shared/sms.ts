@@ -1,6 +1,7 @@
 export const SMS_MESSAGE_LIMIT = 1530;
 export const SMS_LOG_EXCERPT_LIMIT = 60;
 
+/** Count Unicode code points (not UTF-16 code units) to match the SMS API character limit. */
 export function countSmsCharacters(message: string): number {
   return Array.from(message).length;
 }

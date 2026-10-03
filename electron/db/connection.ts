@@ -1,7 +1,7 @@
 import mongoose from 'mongoose';
 import { loadSecret } from '../security/credentialStore';
 
-/** Builds the URI at runtime from encrypted storage; never hardcoded, never sent to the renderer. */
+/** Build the URI at runtime from encrypted storage; never hardcode it or send it to the renderer. */
 export async function connectDatabase(): Promise<void> {
   const user = await loadSecret('db.username');
   const pass = await loadSecret('db.password');
@@ -19,5 +19,6 @@ export async function testConnection(): Promise<{ ok: boolean; error?: string }>
 export async function initializeCollections(): Promise<void> {
   await connectDatabase();
   const { models } = await import('./models');
+  // Sync declared indexes during explicit setup; normal app startup does not rebuild them.
   for (const m of Object.values(models)) { await m.createCollection().catch(() => undefined); await m.syncIndexes(); }
 }

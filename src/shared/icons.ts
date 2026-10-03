@@ -57,6 +57,7 @@ const APP_ICONS = {
   X,
 };
 
+/** Render icons from the explicit app registry to keep the bundled icon set intentional. */
 export function renderIcons(root: Element): void {
   createIcons({
     icons: APP_ICONS,

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { canUseDemoLogin } from '../src/shared/login';
 
+// Browser preview must never grant access without the main-process authentication bridge.
 describe('demo login fallback', () => {
   it('does not expose or allow the default admin account in browser preview mode', () => {
     expect(canUseDemoLogin(null, 'admin', 'admin123')).toBe(false);

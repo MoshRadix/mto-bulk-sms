@@ -1,11 +1,13 @@
 import { apiClient } from './app';
 import { notifyStatus } from './shared/notifications';
 
+/** Settings are presented as stacked panels, so there is no tab state to synchronize. */
 export function bindSettingsTabs() {
   // Settings sections are now stacked vertically as panels instead of tabs.
 }
 
 export function attachSettingsHandlers() {
+  // Settings results are mirrored into the app-wide toast and the local status region for accessibility.
   document.getElementById('setup-form')?.addEventListener('submit', async (event) => {
     event.preventDefault();
     const form = event.currentTarget as HTMLFormElement;

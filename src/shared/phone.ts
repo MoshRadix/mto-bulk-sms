@@ -22,6 +22,7 @@ export function parseMvMobileList(input: string): string[] {
     throw new Error('Remove empty entries from the recipient list.');
   }
 
+  // Validate the entire list before returning anything, then deduplicate normalized numbers.
   const normalizedNumbers = entries.map(normalizeMvNumber);
   const invalidNumbers = [...new Set(normalizedNumbers.filter((number) => !isValidMvMobile(number)))];
   if (invalidNumbers.length) {

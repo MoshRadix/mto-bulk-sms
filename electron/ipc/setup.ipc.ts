@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { loadSecret, saveSecret } from '../security/credentialStore';
 import { connectDatabase, initializeCollections, testConnection } from '../db/connection';
 
+/** Main-process boundary for validated database, authentication, contact/group, user, and SMS operations. */
 const DbCreds = z.object({
   username: z.string().trim().min(1),
   password: z.string().min(1),
@@ -26,12 +27,14 @@ type AuthenticatedUser = { id: string; role: 'administrator' | 'user' };
 const authenticatedUsers = new Map<number, AuthenticatedUser>();
 
 function getAuthenticatedUser(senderId: number): AuthenticatedUser {
+  // Sessions are tied to the renderer's WebContents ID and removed when that renderer is destroyed.
   const user = authenticatedUsers.get(senderId);
   if (!user) throw new Error('Sign in before managing groups.');
   return user;
 }
 
 function requireAdministrator(senderId: number): AuthenticatedUser {
+  // UI visibility is not authorization; privileged IPC handlers must enforce the role here.
   const user = getAuthenticatedUser(senderId);
   if (user.role !== 'administrator') throw new Error('Administrator access is required for this action.');
   return user;
@@ -135,6 +138,7 @@ function parseDirectSmsRecipients(input: string): string[] {
   const entries = cleanInput.split(',').map((entry) => entry.trim());
   if (entries.some((entry) => !entry)) throw new Error('Remove empty entries from the recipient list.');
 
+  // Normalize before deduplication so local and international spellings queue only one SMS per number.
   const numbers = entries.map(normalizeMvNumber);
   const invalidNumbers = [...new Set(numbers.filter((number) => !isValidMvMobile(number)))];
   if (invalidNumbers.length) {
@@ -148,6 +152,7 @@ function isDuplicateKeyError(error: unknown): boolean {
 }
 
 export function getGroupMemberCount(groupMembers: unknown[] = [], actualMemberIds: unknown[] = []): number {
+  // Contact assignments are authoritative when the legacy Group.members array is stale.
   if (actualMemberIds.length > 0) return actualMemberIds.length;
   return Array.isArray(groupMembers) ? groupMembers.length : 0;
 }
@@ -163,6 +168,7 @@ async function removeContactFromGroup(models: any, groupId: string | undefined, 
 }
 
 async function saveGroupMembers(models: any, groupId: string, memberIds: string[], createdBy?: unknown): Promise<number> {
+  // Membership is represented by group-scoped contact records; removal soft-deletes only those records.
   const selectedIds = new Set(memberIds);
   const [currentMembers, selectedContacts] = await Promise.all([
     models.Contact.find({ groupId, deletedAt: null }).lean(),
@@ -213,6 +219,7 @@ function escapeXml(value: string): string {
 }
 
 export function buildDhiraaguXmlVariants({ username, password, sender, to, text }: { username: string; password: string; sender: string; to: string; text: string }): string[] {
+  // Try the documented telemessage shape first, followed by provider-compatible legacy payload shapes.
   const safeUser = escapeXml(username);
   const safePassword = escapeXml(password);
   const safeSender = escapeXml(sender);
@@ -278,6 +285,7 @@ export function buildDhiraaguXmlVariants({ username, password, sender, to, text 
 }
 
 export function parseDhiraaguStatus(xml: string): { messageId: string; messageKey: string } {
+  // Accept the provider's documented casing/separator variants but require both IDs for tracking.
   const regex = /<(?:message[_-]?id|MESSAGE[_-]?ID|MESSAGEID|id)>(.*?)<\/(?:message[_-]?id|MESSAGE[_-]?ID|MESSAGEID|id)>/is;
   const keyRegex = /<(?:message[_-]?key|MESSAGE[_-]?KEY|MESSAGEKEY|key)>(.*?)<\/(?:message[_-]?key|MESSAGE[_-]?KEY|MESSAGEKEY|key)>/is;
 
@@ -291,10 +299,12 @@ export function parseDhiraaguStatus(xml: string): { messageId: string; messageKe
 }
 
 async function ensureDbReady() {
+  // This helper only connects; administrator creation belongs to the guarded setup bootstrap below.
   await connectDatabase();
 }
 
 async function usesLegacyDefaultAdminPassword(admin: { username?: string; passwordHash?: string } | null): Promise<boolean> {
+  // Existing installs are forced to replace the historical public default during setup.
   return Boolean(
     admin?.username === 'admin'
     && admin.passwordHash
@@ -346,6 +356,7 @@ export async function getSetupStatus(): Promise<{ configured: boolean; databaseC
 }
 
 export function registerSetupIpc() {
+  // Setup routes are callable before login; auth:login establishes the sender context used by protected handlers.
   ipcMain.handle('setup:status', async () => getSetupStatus());
 
   ipcMain.handle('setup:save-db', async (_e, raw) => {
@@ -383,6 +394,7 @@ export function registerSetupIpc() {
     return { ok: true };
   });
 
+  // The provider password is write-only from the renderer; settings reads return only the username.
   ipcMain.handle('settings:get-sms-provider', async () => {
     const auth = await getDhiraaguAuthRecord();
     return {
@@ -421,6 +433,7 @@ export function registerSetupIpc() {
       role: user.role === 'administrator' ? 'administrator' : 'user',
     };
     const senderId = event.sender.id;
+    // Store only the minimum authorization context needed by later IPC requests.
     authenticatedUsers.set(senderId, authenticatedUser);
     event.sender.once('destroyed', () => authenticatedUsers.delete(senderId));
     return {
@@ -431,6 +444,7 @@ export function registerSetupIpc() {
     };
   });
 
+  // Contact CRUD and CSV import keep validation and persistence in the main process.
   ipcMain.handle('contacts:list', async () => {
     await ensureDbReady();
     const { models } = await import('../db/models');
@@ -613,6 +627,7 @@ export function registerSetupIpc() {
     return { count: results.length, skippedDuplicates: skippedNumbers.length, skippedNumbers, rows: results };
   });
 
+  // Group lists derive member counts from live contact assignments to tolerate stale legacy arrays.
   ipcMain.handle('groups:list', async () => {
     await ensureDbReady();
     const { models } = await import('../db/models');
@@ -637,6 +652,7 @@ export function registerSetupIpc() {
   });
 
   ipcMain.handle('groups:create', async (event, raw) => {
+    // Group structure changes are administrator-only; member edits are separately checked in groups:update.
     requireAdministrator(event.sender.id);
     const c = GroupInput.parse(raw);
     await ensureDbReady();
@@ -693,6 +709,7 @@ export function registerSetupIpc() {
     return { ok: true };
   });
 
+  // User records never include password hashes in renderer responses.
   ipcMain.handle('users:list', async () => {
     await ensureDbReady();
     const { models } = await import('../db/models');
@@ -768,12 +785,14 @@ export function registerSetupIpc() {
     return { ok: true };
   });
 
+  // SMS list cursors use createdAt plus _id to provide stable pagination across timestamp ties.
   ipcMain.handle('sms:list', async (event, raw) => {
     const input = SmsListInput.parse(raw ?? {});
     const authenticatedUser = getAuthenticatedUser(event.sender.id);
     await ensureDbReady();
     const { models } = await import('../db/models');
     const filter: Record<string, unknown> = { deletedAt: null };
+    // Non-admins are always scoped to their own logs; ownOnly can further restrict an administrator query.
     if (authenticatedUser.role !== 'administrator' || input.ownOnly) filter.createdBy = authenticatedUser.id;
     if (input.sentOnly) filter.status = { $in: ['submitted', 'processing', 'delivered'] };
     if (input.cursor) {
@@ -833,6 +852,7 @@ export function registerSetupIpc() {
       : null;
     if (c.groupId && !group) throw new Error('Selected group was not found.');
 
+    // Snapshot the selected group membership at queue time so later edits do not change queued recipients.
     const recipients = c.groupId
       ? (await models.Contact.find({ groupId: group!._id, deletedAt: null }).lean())
           .map((contact) => ({ mobile: contact.mobile, name: contact.name ?? '' }))
@@ -901,6 +921,7 @@ export function registerSetupIpc() {
     }
   });
 
+  // Only queued records are claimed here; submitted/terminal statuses are never selected for sending.
   ipcMain.handle('sms:send', async (event) => {
     const authenticatedUser = getAuthenticatedUser(event.sender.id);
     await ensureDbReady();

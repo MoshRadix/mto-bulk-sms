@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { CHANNELS } from '../electron/ipc/channels';
 import { getGroupMemberCount } from '../electron/ipc/setup.ipc';
 
+// The preload whitelist is intentionally duplicated inline because sandboxed preload cannot import local modules.
 describe('preload whitelist', () => {
   it('matches electron/ipc/channels.ts and has no local requires', () => {
     const src = readFileSync('electron/preload.ts', 'utf8');

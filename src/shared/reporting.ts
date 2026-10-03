@@ -16,6 +16,7 @@ export type ContactCsvRow = {
   groupId?: string;
 };
 
+/** Quote every CSV cell and double embedded quotes so commas remain part of the value. */
 function csvEscape(value: string | number | null | undefined): string {
   const normalized = value == null ? '' : String(value);
   return `"${normalized.replace(/"/g, '""')}"`;
@@ -26,6 +27,7 @@ function parseCsvLine(line: string): string[] {
   let current = '';
   let inQuotes = false;
 
+  // Track quote state so commas inside a quoted cell are not treated as column boundaries.
   for (let index = 0; index < line.length; index += 1) {
     const char = line[index];
     if (char === '"') {
@@ -51,6 +53,7 @@ function parseCsvLine(line: string): string[] {
   return values;
 }
 
+/** Export a stable column order so files round-trip through the contact importer. */
 export function exportContactsCsv(rows: ContactCsvRow[]): string {
   const headers = ['name', 'mobile', 'department', 'designation', 'notes', 'groupName'];
   const lines = [headers.join(',')];
@@ -67,6 +70,7 @@ export function parseContactsCsv(csv: string): ContactCsvRow[] {
   const clean = csv.trim();
   if (!clean) return [];
 
+  // Records are line-delimited; parseCsvLine handles quoted commas and escaped quotes per row.
   const lines = clean.split(/\r?\n/).filter((line) => line.trim().length > 0);
   if (lines.length < 2) return [];
 
@@ -100,6 +104,7 @@ export function parseContactsCsv(csv: string): ContactCsvRow[] {
 export function filterSmsLogs<T extends SmsLogRow>(logs: T[], filters: { year?: number; month?: number } = {}): T[] {
   return logs.filter((log) => {
     const createdAt = log.createdAt ? new Date(log.createdAt) : null;
+    // Entries without a valid timestamp cannot be assigned reliably to a requested period.
     if (!createdAt || Number.isNaN(createdAt.getTime())) {
       return false;
     }

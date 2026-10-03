@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { exportContactsCsv, exportSmsLogsCsv, filterSmsLogs, parseContactsCsv } from '../src/shared/reporting';
 
+// Keep CSV import/export and local date filtering behavior stable for admin reporting workflows.
 describe('sms reporting', () => {
   const logs = [
     { id: '1', to: '9607712345', message: 'A', status: 'delivered', createdAt: '2024-01-15T10:00:00.000Z' },

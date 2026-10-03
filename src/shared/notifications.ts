@@ -1,5 +1,6 @@
 export type NotificationTone = 'info' | 'success' | 'error';
 
+/** One app-wide toast is shown at a time; each new message replaces the previous one. */
 const NOTIFICATION_DURATION = 5000;
 const INLINE_STATUS_DURATION = 5000;
 const statusTimers = new WeakMap<Element, number>();
@@ -88,6 +89,7 @@ export function showAppNotification(message: string, tone: NotificationTone = 'i
   if (!message) return;
   ensureNotificationStyles();
   const region = ensureNotificationRegion();
+  // Clear both timers before replacing the singleton toast so an old timeout cannot remove a new message.
   window.clearTimeout(dismissTimer);
   window.clearTimeout(exitTimer);
   activeNotification?.remove();
@@ -119,6 +121,7 @@ export function showAppNotification(message: string, tone: NotificationTone = 'i
 }
 
 function dismissNotification(notification: HTMLDivElement): void {
+  // Ignore stale timers from a toast that has already been replaced by a newer message.
   if (activeNotification !== notification) return;
   window.clearTimeout(dismissTimer);
   notification.classList.add('is-leaving');
@@ -129,6 +132,7 @@ function dismissNotification(notification: HTMLDivElement): void {
 }
 
 function inferNotificationTone(message: string): NotificationTone {
+  // Keep legacy callers consistent while allowing important call sites to pass an explicit tone.
   if (/^no\b/i.test(message)) return 'info';
   if (/unable|could not|failed|not saved|not queued|invalid|missing|required|only available|cannot exceed|select at least|select one or more/i.test(message)) {
     return 'error';

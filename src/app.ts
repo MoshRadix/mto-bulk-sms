@@ -1,5 +1,6 @@
 import { isValidMvMobile, normalizeMvNumber } from './shared/phone';
 
+/** Renderer-side records and transient UI state; database calls are delegated through the preload API. */
 export type Contact = {
   id: string;
   name: string;
@@ -75,6 +76,7 @@ export type DashboardState = {
   view: 'setup' | 'login' | 'dashboard';
 };
 
+/** Single renderer state store. Re-rendering replaces the view, not this session state. */
 export const state: DashboardState = {
   contacts: [],
   groups: [],
@@ -119,10 +121,12 @@ declare global {
 }
 
 export function apiClient() {
+  // A missing bridge means this is the browser preview, not an authenticated Electron session.
   return window.api ?? null;
 }
 
 export function getValidContactCount() {
+  // Count normalized numbers, not contact rows, because one person can belong to multiple groups.
   return new Set(state.contacts
     .map((contact) => normalizeMvNumber(contact.mobile))
     .filter(isValidMvMobile)).size;

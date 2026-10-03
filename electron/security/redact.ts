@@ -1,6 +1,6 @@
 const SENSITIVE = /(pass(word)?|secret|token|key|authorization)/i;
 
-/** Deep-clones an object, masking sensitive fields. Use before any logging/audit write. */
+/** Deep-clone nested data and mask values whose property names look secret-bearing before logging. */
 export function redact<T>(value: T): T {
   if (Array.isArray(value)) return value.map(redact) as unknown as T;
   if (value && typeof value === 'object') {

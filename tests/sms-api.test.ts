@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildDhiraaguXmlVariants, parseDhiraaguStatus } from '../electron/ipc/setup.ipc';
 
+// Pin the provider's expected request shape and tolerate known response tag variations.
 describe('Dhiraagu XML API helpers', () => {
   it('builds the expected Dhiraagu message XML payload', () => {
     const xml = buildDhiraaguXmlVariants({ username: 'addu', password: 'secret', sender: 'adducouncil', to: '9990166', text: 'Test Message, please ignore.' })[0];

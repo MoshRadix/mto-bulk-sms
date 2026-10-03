@@ -1,5 +1,6 @@
 import { Schema, model, Types } from 'mongoose';
 
+/** Central schema registry; collection names and indexes are kept stable for existing databases. */
 const SCHEMA_VERSION = 1;
 
 /** Shared options: timestamps + schema versioning + soft delete. */
@@ -37,6 +38,7 @@ const smsSchema = new Schema({
   submittedAt: Date, deliveredAt: Date, requestXml: String, responseXml: String, // request must be stored with password masked
   createdBy: { type: Types.ObjectId, ref: 'User', index: true },
 }, { ...opts, collection: 'sms_logs' });
+// createdAt plus _id gives stable ordering when several SMS rows share a timestamp.
 smsSchema.index({ createdAt: -1, _id: -1 });
 smsSchema.index({ body: 'text' });
 const SmsLog = model('SmsLog', smsSchema);

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { isValidMvMobile, normalizeMvNumber, parseMvMobileList } from '../src/shared/phone';
 
+// Phone validation is shared by contact entry, imports, and direct-recipient SMS composition.
 describe('Maldives numbers', () => {
   it('accepts valid', () => { expect(isValidMvMobile('9607712345')).toBe(true); expect(isValidMvMobile('+960 991-2345')).toBe(true); });
   it('normalizes bare 7-digit', () => expect(normalizeMvNumber('7712345')).toBe('9607712345'));

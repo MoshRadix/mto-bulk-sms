@@ -1,5 +1,6 @@
 import type { SmsCursor, SmsItem } from '../app';
 
+/** History pages are cached locally per user; remote cursors are preserved for pagination. */
 export const SMS_HISTORY_PAGE_SIZE = 20;
 
 export type StoredSmsHistoryPage = {
@@ -69,6 +70,7 @@ export async function clearSmsHistoryPagesAfter(userId: string, page: number): P
   cursorRequest.onsuccess = () => {
     const cursor = cursorRequest.result;
     if (!cursor) return;
+    // A refreshed earlier page invalidates all cached cursors that followed it.
     if ((cursor.value as StoredSmsHistoryPage).page > page) cursor.delete();
     cursor.continue();
   };
@@ -78,6 +80,7 @@ export async function clearSmsHistoryPagesAfter(userId: string, page: number): P
 export async function prependSmsHistoryItems(userId: string, newItems: SmsItem[]): Promise<void> {
   if (!newItems.length) return;
 
+  // Merge by ID before sorting so syncing the same message twice stays idempotent.
   const existingPage = await getStoredSmsHistoryPage(userId, 0);
   const itemsById = new Map<string, SmsItem>();
   for (const item of [...(existingPage?.items ?? []), ...newItems]) itemsById.set(item.id, item);

@@ -9,6 +9,7 @@ import { bindSettingsTabs, attachSettingsHandlers } from './settings';
 import { renderIcons } from './shared/icons';
 import packageInfo from '../package.json';
 
+/** The dashboard owns rendering and event binding for all authenticated workspace sections. */
 const SMS_PAGE_SIZE = 10;
 const SMS_HISTORY_PAGE_SIZE = 20;
 let localSmsTemplates: LocalSmsTemplate[] = [];
@@ -21,6 +22,7 @@ let editingLocalSmsTemplateId: string | null = null;
 type UniqueContactRow = { contact: Contact; contactIds: string[]; groupNames: string[] };
 
 function getUniqueContactRows(contacts: Contact[]): UniqueContactRow[] {
+  // Contacts are group-scoped records; collapse the directory by normalized mobile, retaining all group links.
   const rows = new Map<string, UniqueContactRow>();
   for (const contact of contacts) {
     const mobile = normalizeMvNumber(contact.mobile);
@@ -33,6 +35,7 @@ function getUniqueContactRows(contacts: Contact[]): UniqueContactRow[] {
 }
 
 function escapeHtml(value: string): string {
+  // Dashboard markup is assembled with templates, so dynamic database/local values must be escaped first.
   return value.replace(/[&<>"']/g, (character) => ({
     '&': '&amp;',
     '<': '&lt;',
@@ -51,6 +54,7 @@ async function copyTextToClipboard(value: string): Promise<void> {
     }
   }
 
+  // Electron may deny the async Clipboard API; preserve the user click with a temporary selection fallback.
   const textArea = document.createElement('textarea');
   textArea.value = value;
   textArea.style.position = 'fixed';
@@ -71,6 +75,7 @@ export async function loadDashboardData() {
   const appApi = apiClient();
   state.view = 'dashboard';
   if (!appApi) {
+    // Browser preview intentionally has no database-backed demo identity or writable data.
     state.contacts = [];
     state.groups = [];
     state.sms = [];
@@ -88,6 +93,7 @@ export async function loadDashboardData() {
   }
 
   try {
+    // Load the visible dashboard's independent resources together, then publish one consistent state snapshot.
     const [contacts, groups, smsPage, users] = await Promise.all([
       appApi.invoke('contacts:list') as Promise<Array<{ id: string; name: string; mobile: string; department: string; groupId?: string; groupName?: string }>>,
       appApi.invoke('groups:list') as Promise<Array<{ id: string; name: string; description: string; memberCount: number }>>,
@@ -143,6 +149,7 @@ async function loadSmsReport() {
 
   const reportItems: SmsItem[] = [];
   let cursor: SmsCursor | null = null;
+  // Reports need the full result set; follow the server cursor until no further pages remain.
   do {
     const page = await appApi.invoke('sms:list', {
       limit: 50,
@@ -165,6 +172,7 @@ async function loadSmsHistoryPage(page: number, refresh = false) {
   state.smsHistoryError = null;
 
   try {
+    // Reuse this account's cached page unless refresh was explicitly requested; later pages depend on saved cursors.
     const cachedPage = await getStoredSmsHistoryPage(userId, page);
     let historyPage: StoredSmsHistoryPage | null = refresh ? null : cachedPage;
 
@@ -230,6 +238,7 @@ async function loadSmsHistoryPage(page: number, refresh = false) {
 async function loadLocalTemplates(userId: string) {
   if (localSmsTemplatesUserId === userId || templatesLoadingUserId === userId) return;
   const loadToken = ++templatesLoadToken;
+  // Ignore a late IndexedDB response if another account/page load has superseded it.
   templatesLoadingUserId = userId;
   templatesLoadError = null;
   renderDashboard();
@@ -268,6 +277,7 @@ function bindMainNavigation() {
       });
 
       if (selectedSection === 'admin' && !state.smsReportLoaded && !state.smsReportLoading) {
+        // Fetch the expensive all-pages report only when an administrator opens its panel.
         state.smsReportLoading = true;
         state.smsReportError = null;
         const reportList = document.getElementById('sms-report-list');
@@ -290,6 +300,7 @@ function bindMainNavigation() {
 }
 
 export function renderDashboard() {
+  // Rebuild the active dashboard shell from state; event listeners are rebound after each render below.
   if (!state.user) return;
 
   const currentDate = new Date();
@@ -314,6 +325,7 @@ export function renderDashboard() {
   const editingGroup = state.groups.find((group) => group.id === state.groupEditorId);
   const currentGroupMembers = state.contacts.filter((contact) => contact.groupId === state.groupEditorId);
   const currentGroupNumbers = new Set(currentGroupMembers.map((contact) => contact.mobile));
+  // The same mobile can have separate group-scoped contact records; don't offer duplicate recipients to this group.
   const availableGroupContacts = state.contacts.filter((contact) => contact.groupId !== state.groupEditorId && !currentGroupNumbers.has(contact.mobile));
 
   const adminNav = state.user?.role === 'administrator'
@@ -331,6 +343,7 @@ export function renderDashboard() {
   const selectedYear = state.reportFilters.year ?? '';
   const selectedMonth = state.reportFilters.month ?? '';
   const reportRows = filterSmsLogs(state.smsReport, state.reportFilters);
+  // Filter options are derived from loaded timestamps; absent years leave the report export disabled.
   const yearOptions = years.length
     ? years.map((year) => `<option value="${year}" ${selectedYear === year ? 'selected' : ''}>${year}</option>`).join('')
     : '<option value="">No logs</option>';
@@ -347,6 +360,7 @@ export function renderDashboard() {
     return date.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
   };
 
+  // Keep list-state markup beside its data source so loading, error, and empty states remain distinct.
   const userList = state.users.length
     ? state.users
         .map(
@@ -412,6 +426,7 @@ export function renderDashboard() {
           `).join('')
         : '<li class="sms-history-state"><i data-lucide="history"></i><strong>No sent messages yet</strong><span class="muted">Messages sent from this account will appear here.</span></li>';
 
+        // Never render a cached account's templates while a different account is signed in.
   const userTemplates = localSmsTemplatesUserId === state.user.id ? localSmsTemplates : [];
   const isLoadingTemplates = templatesLoadingUserId === state.user.id;
   const templatesRowsHtml = isLoadingTemplates
@@ -437,6 +452,7 @@ export function renderDashboard() {
           `).join('')
         : '<li class="template-state"><i data-lucide="file-text"></i><strong>No templates saved</strong><span class="muted">Create a reusable message on the left. Your templates stay on this device.</span></li>';
 
+  // The sections share one shell; `activeSection` controls visibility without discarding loaded state.
   root.innerHTML = `
     <style>
       :root {
@@ -1508,6 +1524,7 @@ export function renderDashboard() {
     if (!templateMessageInput || !templateCounter) return;
     let characterCount = countSmsCharacters(templateMessageInput.value);
     if (characterCount > SMS_MESSAGE_LIMIT) {
+      // Truncate pasted text as well as typed input, using the same code-point count as the API limit.
       templateMessageInput.value = truncateSmsMessage(templateMessageInput.value, SMS_MESSAGE_LIMIT);
       characterCount = countSmsCharacters(templateMessageInput.value);
     }
@@ -1780,6 +1797,7 @@ export function renderDashboard() {
       groupId: String(formData.get('groupId') ?? '').trim(),
     };
     const appApi = apiClient();
+    // Validate after normalization so equivalent phone spellings cannot bypass per-group duplicate checks.
     if (!payload.name || !payload.mobile || !isValidMvMobile(payload.mobile)) {
       setContactStatus('Contact not saved: use a valid Maldives mobile number.');
       return;
@@ -1942,6 +1960,7 @@ export function renderDashboard() {
       option.hidden = !visible;
       if (visible) visibleCount += 1;
     }
+    // Search hides options but deliberately keeps their checked state for batch selection.
     const selectedCount = document.querySelectorAll<HTMLInputElement>('.member-option input:checked').length;
     const results = document.getElementById('group-member-results');
     if (results) {
@@ -1983,6 +2002,7 @@ export function renderDashboard() {
       return result.memberCount;
     }
 
+    // Browser preview mirrors the backend's copy-per-group model without pretending to persist remotely.
     const selectedIds = new Set(memberIds);
     const existingMembers = state.contacts.filter((contact) => contact.groupId === groupId);
     const retainedMembers = existingMembers.filter((contact) => selectedIds.has(contact.id));
@@ -2153,6 +2173,7 @@ export function renderDashboard() {
       groupId: rawGroupId || undefined,
     };
     const appApi = apiClient();
+    // Queueing creates pending log rows; only the separate Send queued action contacts the provider.
     if (!payload.message.trim()) {
       notifyStatus(status, 'SMS not queued: message text is required.', 'error');
       return;

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { countSmsCharacters, createSmsExcerpt, SMS_LOG_EXCERPT_LIMIT, SMS_MESSAGE_LIMIT, truncateSmsMessage } from '../src/shared/sms';
 
+// These cases protect the API's Unicode-aware 1,530-character limit and readable log excerpts.
 describe('SMS message length', () => {
   it('counts whitespace and invisible Unicode characters', () => {
     expect(countSmsCharacters('A \n\t\u200B')).toBe(5);

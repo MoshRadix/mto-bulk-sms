@@ -3,6 +3,7 @@ import { autoUpdater } from 'electron-updater';
 import path from 'path';
 import { registerSetupIpc } from './ipc/setup.ipc';
 
+/** Create the isolated renderer; database and secret access remain in this main process. */
 function createWindow() {
   const win = new BrowserWindow({
     width: 1280, height: 800, title: 'MTO Bulk SMS Manager',
@@ -17,6 +18,7 @@ function createWindow() {
 }
 
 function configureAutoUpdates() {
+  // electron-updater's GitHub feed is only available in installed Windows builds.
   if (!app.isPackaged || process.platform !== 'win32') return;
 
   autoUpdater.autoDownload = true;
@@ -41,6 +43,7 @@ function configureAutoUpdates() {
 }
 
 app.whenReady().then(() => {
+  // Deny web permission prompts before loading any renderer content.
   session.defaultSession.setPermissionRequestHandler((_w, _p, cb) => cb(false));
   registerSetupIpc();
   createWindow();

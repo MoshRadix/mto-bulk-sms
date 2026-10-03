@@ -3,6 +3,7 @@ import { loadDashboardData } from './dashboard';
 import { notifyStatus, showAppNotification } from './shared/notifications';
 import { renderIcons } from './shared/icons';
 
+/** Owns the pre-dashboard lifecycle: database setup, first-admin bootstrap, and sign-in. */
 const REMEMBERED_LOGIN_KEY = 'mto-bulk-sms.remembered-login';
 
 function escapeHtml(value: string): string {
@@ -57,6 +58,7 @@ function clearRememberedLogin() {
 
 export function renderSetup(message = 'Configure MongoDB to continue.', administratorSetupOnly = false) {
   state.view = 'setup';
+  // Existing databases with an administrator skip account creation; incomplete setup resumes at the required stage.
   let setupPhase: 'database' | 'administrator' = administratorSetupOnly ? 'administrator' : 'database';
   root.innerHTML = `
     <style>
@@ -166,6 +168,7 @@ export function renderSetup(message = 'Configure MongoDB to continue.', administ
         }
         if (!status.databaseConnected) throw new Error(status.message ?? 'Could not connect to the database.');
 
+        // Reveal admin fields only after the main process confirms the database is reachable and needs an admin.
         setupPhase = 'administrator';
         const databaseFields = document.getElementById('setup-database-fields') as HTMLFieldSetElement | null;
         const administratorFields = document.getElementById('setup-admin-fields') as HTMLFieldSetElement | null;
@@ -215,6 +218,7 @@ export function renderSetup(message = 'Configure MongoDB to continue.', administ
 }
 
 export function renderLogin() {
+  // Passwords are never prefilled or persisted; the optional preference remembers only the username.
   state.view = 'login';
   const rememberedLogin = getRememberedLogin();
 
@@ -318,6 +322,7 @@ export function renderLogin() {
 }
 
 export async function initializeApp() {
+  // setup:status decides whether to show login, database connection, or administrator creation.
   const appApi = apiClient();
   state.view = 'setup';
 

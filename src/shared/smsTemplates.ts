@@ -9,6 +9,7 @@ export type LocalSmsTemplate = {
 
 type StoredSmsTemplate = LocalSmsTemplate & { key: string };
 
+// A separate local database keeps reusable drafts off the remote SMS/contact database.
 const DATABASE_NAME = 'mto-bulk-sms-local-templates';
 const DATABASE_VERSION = 1;
 const STORE_NAME = 'templates';
@@ -45,6 +46,7 @@ export async function listLocalSmsTemplates(userId: string): Promise<LocalSmsTem
   const database = await openTemplatesDatabase();
   const transaction = database.transaction(STORE_NAME, 'readonly');
   const done = transactionDone(transaction);
+  // The user index and compound key prevent one signed-in account from seeing another's drafts.
   const request = transaction.objectStore(STORE_NAME).index('byUserId').getAll(IDBKeyRange.only(userId));
   const templates = await new Promise<StoredSmsTemplate[]>((resolve, reject) => {
     request.onsuccess = () => resolve(request.result as StoredSmsTemplate[]);
@@ -60,6 +62,7 @@ export async function saveLocalSmsTemplate(template: LocalSmsTemplate): Promise<
   const database = await openTemplatesDatabase();
   const transaction = database.transaction(STORE_NAME, 'readwrite');
   const done = transactionDone(transaction);
+  // Compound keys make writes and deletes account-scoped even if template IDs collide.
   transaction.objectStore(STORE_NAME).put({ ...template, key: `${template.userId}:${template.id}` });
   await done;
 }
