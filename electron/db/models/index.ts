@@ -16,7 +16,7 @@ const User = model('User', new Schema({
 
 const contactSchema = new Schema({
   ...base, name: { type: String, required: true, trim: true },
-  mobile: { type: String, required: true, match: /^960[79]\d{6}$/ },
+  mobile: { type: String, required: true, match: /^960(?:7[1-9]|9[1-9])\d{5}$/ },
   department: String, designation: String, notes: String, tags: [String],
   groupId: { type: Types.ObjectId, ref: 'Group', required: true, index: true },
   createdBy: { type: Types.ObjectId, ref: 'User', required: true },

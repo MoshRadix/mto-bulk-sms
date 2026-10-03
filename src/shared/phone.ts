@@ -1,5 +1,5 @@
-/** Maldives mobile numbers: country code 960 + 7 digits starting with 7 or 9. */
-const MV_MOBILE = /^960[79]\d{6}$/;
+/** Maldives mobile: country code 960, prefixes 71-79 or 91-99, then five subscriber digits. */
+const MV_MOBILE = /^960(?:7[1-9]|9[1-9])\d{5}$/;
 
 /** Strip spaces, dashes, "+" and a leading "00"; add 960 to bare 7-digit numbers. */
 export function normalizeMvNumber(input: string): string {

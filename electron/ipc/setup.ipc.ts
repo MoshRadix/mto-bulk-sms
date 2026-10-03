@@ -132,7 +132,7 @@ function normalizeMvNumber(input: string): string {
 }
 
 function isValidMvMobile(input: string): boolean {
-  return /^960[79]\d{6}$/.test(normalizeMvNumber(input));
+  return /^960(?:7[1-9]|9[1-9])\d{5}$/.test(normalizeMvNumber(input));
 }
 
 function parseDirectSmsRecipients(input: string): string[] {
