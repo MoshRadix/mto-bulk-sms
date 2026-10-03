@@ -14,7 +14,7 @@ const SetupBootstrapInput = z.object({
   name: z.string().trim().min(1),
   username: z.string().trim().min(1).toLowerCase(),
   email: z.string().trim().email().toLowerCase(),
-  password: z.string().min(12),
+  password: z.string().min(8),
 });
 const SmsConfig = z.object({
   username: z.string().trim().min(1).optional(),
@@ -25,7 +25,7 @@ const SmsConfig = z.object({
 const LoginInput = z.object({ username: z.string().trim().min(1), password: z.string().min(1) });
 const ChangePasswordInput = z.object({
   currentPassword: z.string().min(1),
-  newPassword: z.string().min(12),
+  newPassword: z.string().min(8),
 });
 type AuthenticatedUser = { id: string; role: 'administrator' | 'user' };
 const authenticatedUsers = new Map<number, AuthenticatedUser>();
@@ -111,7 +111,7 @@ const UserInput = z.object({
   name: z.string().trim().min(1),
   username: z.string().trim().min(1),
   email: z.string().trim().email(),
-  password: z.string().trim().min(6).optional(),
+  password: z.string().trim().min(8).optional(),
   role: z.enum(['administrator', 'user']).default('user'),
 });
 const UserUpdateInput = z.object({
@@ -119,7 +119,7 @@ const UserUpdateInput = z.object({
   name: z.string().trim().min(1).optional(),
   username: z.string().trim().min(1).optional(),
   email: z.string().trim().email().optional(),
-  password: z.string().trim().min(6).optional(),
+  password: z.string().trim().min(8).optional(),
   role: z.enum(['administrator', 'user']).optional(),
 }).refine((value) => Boolean(value.name || value.username || value.email || value.password || value.role), {
   message: 'At least one field is required to update a user.',

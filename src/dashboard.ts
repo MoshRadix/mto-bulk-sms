@@ -1452,7 +1452,7 @@ export function renderDashboard() {
           <div class="settings-stack">
             <div class="settings-pane" data-pane="password">
               <h3>Change password</h3>
-              <p class="muted" style="margin: -8px 0 16px; font-size: 0.84rem;">Confirm your current password and choose a new password of at least 12 characters.</p>
+              <p class="muted" style="margin: -8px 0 16px; font-size: 0.84rem;">Confirm your current password and choose a new password of at least 8 characters.</p>
               <form id="change-password-form" class="stack" autocomplete="off">
                 <div>
                   <label for="current-password">Current password</label>
@@ -1461,11 +1461,11 @@ export function renderDashboard() {
                 <div class="row">
                   <div>
                     <label for="new-password">New password</label>
-                    <input id="new-password" name="newPassword" type="password" autocomplete="new-password" minlength="12" required />
+                    <input id="new-password" name="newPassword" type="password" autocomplete="new-password" minlength="8" required />
                   </div>
                   <div>
                     <label for="confirm-password">Confirm new password</label>
-                    <input id="confirm-password" name="confirmPassword" type="password" autocomplete="new-password" minlength="12" required />
+                    <input id="confirm-password" name="confirmPassword" type="password" autocomplete="new-password" minlength="8" required />
                   </div>
                 </div>
                 <div class="actions">
@@ -2362,8 +2362,8 @@ export function renderDashboard() {
         await appApi.invoke('users:update', { id: userId, ...payload, password: payload.password || undefined });
         successMessage = `Updated user ${payload.username}.`;
       } else {
-        if (!payload.password || payload.password.length < 6) {
-          notifyStatus(status, 'A password with at least 6 characters is required for new users.', 'error');
+        if (!payload.password || payload.password.length < 8) {
+          notifyStatus(status, 'A password with at least 8 characters is required for new users.', 'error');
           return;
         }
         await appApi.invoke('users:create', payload);

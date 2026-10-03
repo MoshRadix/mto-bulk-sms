@@ -6,7 +6,7 @@ Windows Electron desktop app for Maradhoo Town Office (MTO), Addu City Council, 
     npm run start      # Build and launch the Electron app
     npm test
 
-On first launch, enter the MongoDB connection details and create an administrator account. Choose a strong administrator password of at least 12 characters. The optional remember setting stores the username only, never the password.
+On first launch, enter the MongoDB connection details and create an administrator account. Passwords for app accounts must be at least 8 characters; no special-character or letter/number mixture is required. The optional remember setting stores the username only, never the password.
 
 For renderer-only development, run `npm run dev`. Create the Windows installer with `npm run dist`; the setup executable is written to `dist/` and creates Desktop and Start Menu shortcuts.
 

@@ -120,7 +120,7 @@ export function renderSetup(message = 'Configure MongoDB to continue.', administ
             </div>
             <div style="margin-top: 14px;">
               <label for="setup-admin-password">Administrator password</label>
-              <input id="setup-admin-password" name="adminPassword" type="password" autocomplete="new-password" minlength="12" placeholder="At least 12 characters" required />
+              <input id="setup-admin-password" name="adminPassword" type="password" autocomplete="new-password" minlength="8" placeholder="At least 8 characters" required />
             </div>
             </fieldset>
                   <button type="submit"><i data-lucide="database"></i><span id="setup-submit-label">${administratorSetupOnly ? 'Create administrator' : 'Connect database'}</span></button>

@@ -17,8 +17,8 @@ export function attachSettingsHandlers() {
     const confirmPassword = String(formData.get('confirmPassword') ?? '');
     const status = document.getElementById('change-password-status');
 
-    if (newPassword.length < 12) {
-      notifyStatus(status, 'New password must contain at least 12 characters.', 'error');
+    if (newPassword.length < 8) {
+      notifyStatus(status, 'New password must contain at least 8 characters.', 'error');
       return;
     }
     if (newPassword !== confirmPassword) {
