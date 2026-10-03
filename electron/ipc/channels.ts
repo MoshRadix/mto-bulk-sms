@@ -25,6 +25,7 @@ export const CHANNELS = [
   'users:delete',
   'sms:list',
   'sms:queue',
+  'sms:delete-queued',
   'sms:send',
   'sms:test-connection'
 ] as const;

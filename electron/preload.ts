@@ -10,7 +10,7 @@ const CHANNELS: readonly string[] = [
   'settings:get-sms-provider', 'settings:save-sms-provider',
   'auth:login', 'contacts:list', 'contacts:create', 'contacts:update', 'contacts:delete', 'contacts:bulk-delete', 'contacts:import', 'groups:list', 'groups:create', 'groups:update', 'groups:delete',
   'users:list', 'users:create', 'users:update', 'users:delete',
-  'sms:list', 'sms:queue', 'sms:send', 'sms:test-connection',
+  'sms:list', 'sms:queue', 'sms:delete-queued', 'sms:send', 'sms:test-connection',
 ];
 
 contextBridge.exposeInMainWorld('api', {

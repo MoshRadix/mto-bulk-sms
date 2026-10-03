@@ -83,6 +83,26 @@ async function copyTextToClipboard(value: string): Promise<void> {
   if (!copied) throw new Error('Clipboard access is unavailable.');
 }
 
+function restoreSmsComposerForDirectRecipients(): void {
+  const recipientInput = document.getElementById('sms-recipient-numbers') as HTMLInputElement | null;
+  const groupSelect = document.getElementById('sms-group') as HTMLSelectElement | null;
+  const messageInput = document.getElementById('sms-message') as HTMLTextAreaElement | null;
+
+  // Group mode disables direct numbers; clear that mode and stale number before unlocking both fields.
+  if (groupSelect?.value) {
+    groupSelect.value = '';
+    if (recipientInput) recipientInput.value = '';
+  }
+  if (recipientInput) {
+    recipientInput.disabled = false;
+    recipientInput.readOnly = false;
+  }
+  if (messageInput) {
+    messageInput.disabled = false;
+    messageInput.readOnly = false;
+  }
+}
+
 export async function loadDashboardData() {
   const appApi = apiClient();
   state.view = 'dashboard';
@@ -657,6 +677,9 @@ export function renderDashboard() {
       .sms-log-message strong, .sms-log-message .muted { overflow-wrap: anywhere; word-break: break-word; }
       .sms-log-excerpt { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 1; overflow: hidden; }
       .sms-log-meta { display: flex; flex: 0 0 auto; flex-direction: column; align-items: flex-end; gap: 6px; white-space: nowrap; }
+      .sms-log-status-row { display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
+      .sms-log-remove { width: 28px; height: 28px; padding: 4px; border-radius: 7px; background: rgba(248, 113, 113, 0.1); color: #fca5a5; }
+      .sms-log-remove .ui-icon { width: 16px; height: 16px; flex-basis: 16px; }
       .history-page { margin-top: 20px; }
       .history-header { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 4px 0 22px; border-bottom: 1px solid var(--line); }
       .history-heading { min-width: 0; }
@@ -1060,7 +1083,10 @@ export function renderDashboard() {
                             <span class="muted sms-log-excerpt">${createSmsExcerpt(item.message)}</span>
                           </div>
                           <div class="sms-log-meta">
-                            <span class="pill sms-status ${getSmsStatusClass(item.status)}">${item.status}</span>
+                            <div class="sms-log-status-row">
+                              <span class="pill sms-status ${getSmsStatusClass(item.status)}">${item.status}</span>
+                              ${item.status === 'queued' ? `<button type="button" class="secondary sms-log-remove" data-unqueue-sms-id="${escapeHtml(item.id)}" title="Remove from queue" aria-label="Remove queued message to ${escapeHtml(item.to)}"><i data-lucide="trash-2"></i></button>` : ''}
+                            </div>
                             <span class="muted" style="font-size: 0.72rem; white-space: nowrap;">${formatSmsTimestamp(item.createdAt)}</span>
                           </div>
                         </li>
@@ -1751,6 +1777,46 @@ export function renderDashboard() {
     } finally {
       state.smsLoading = false;
       renderDashboard();
+    }
+  });
+
+  document.getElementById('sms-log-list')?.addEventListener('click', async (event) => {
+    const button = (event.target as HTMLElement).closest('[data-unqueue-sms-id]') as HTMLElement | null;
+    const smsId = button?.getAttribute('data-unqueue-sms-id');
+    if (!smsId || !window.confirm('Remove this queued SMS message?')) return;
+    restoreSmsComposerForDirectRecipients();
+
+    const status = document.getElementById('sms-status');
+    const appApi = apiClient();
+    const updateQueuedLogInPlace = () => {
+      // Avoid re-rendering the dashboard so drafts and current recipient-control state remain intact.
+      state.sms = state.sms.filter((item) => item.id !== smsId);
+      state.queuedSmsCount = Math.max(0, state.queuedSmsCount - 1);
+      button?.closest('li')?.remove();
+
+      const queuedStat = document.querySelector('.stats-grid .stat:nth-child(3) .stat-value');
+      if (queuedStat) queuedStat.textContent = String(state.queuedSmsCount);
+      if (state.sms.length === 0) {
+        const logList = document.getElementById('sms-log-list');
+        if (logList) {
+          logList.innerHTML = state.smsHasMore
+            ? '<li><span class="muted">No messages remain on this page. Load more to view older logs.</span></li>'
+            : '<li><span class="muted">No SMS jobs queued.</span></li>';
+        }
+      }
+    };
+    if (!appApi) {
+      updateQueuedLogInPlace();
+      notifyStatus(status, 'Queued SMS removed.', 'success');
+      return;
+    }
+
+    try {
+      await appApi.invoke('sms:delete-queued', { id: smsId });
+      updateQueuedLogInPlace();
+      notifyStatus(status, 'Queued SMS removed. The composer is ready.', 'success');
+    } catch (error) {
+      notifyStatus(status, error instanceof Error ? error.message : 'Unable to remove queued SMS.', 'error');
     }
   });
 

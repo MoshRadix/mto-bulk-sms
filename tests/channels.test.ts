@@ -20,6 +20,7 @@ describe('preload whitelist', () => {
       'contacts:bulk-delete',
       'groups:update',
       'groups:delete',
+      'sms:delete-queued',
     ]));
   });
 

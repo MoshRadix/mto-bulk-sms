@@ -904,6 +904,22 @@ export function registerSetupIpc() {
     return created;
   });
 
+  ipcMain.handle('sms:delete-queued', async (event, raw) => {
+    const authenticatedUser = getAuthenticatedUser(event.sender.id);
+    const { id } = z.object({ id: z.string().trim().min(1) }).parse(raw);
+    await ensureDbReady();
+    const { models } = await import('../db/models');
+    const filter: Record<string, unknown> = { _id: id, status: 'queued', deletedAt: null };
+    if (authenticatedUser.role !== 'administrator') filter.createdBy = authenticatedUser.id;
+
+    // The status condition makes removal race-safe: once sending begins, a row can no longer be deleted.
+    const result = await models.SmsLog.updateOne(filter, { $set: { deletedAt: new Date() } });
+    if (result.modifiedCount !== 1) {
+      throw new Error('This SMS is no longer queued or you do not have permission to remove it.');
+    }
+    return { ok: true };
+  });
+
   ipcMain.handle('sms:test-connection', async () => {
     await ensureDbReady();
     const auth = await getDhiraaguAuthRecord();
