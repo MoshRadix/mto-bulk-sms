@@ -1783,8 +1783,7 @@ export function renderDashboard() {
   document.getElementById('sms-log-list')?.addEventListener('click', async (event) => {
     const button = (event.target as HTMLElement).closest('[data-unqueue-sms-id]') as HTMLElement | null;
     const smsId = button?.getAttribute('data-unqueue-sms-id');
-    if (!smsId || !window.confirm('Remove this queued SMS message?')) return;
-    restoreSmsComposerForDirectRecipients();
+    if (!smsId) return;
 
     const status = document.getElementById('sms-status');
     const appApi = apiClient();
