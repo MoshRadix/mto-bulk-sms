@@ -34,6 +34,18 @@ function getUniqueContactRows(contacts: Contact[]): UniqueContactRow[] {
   return Array.from(rows.values());
 }
 
+function getSmsStatusClass(status: string): string {
+  switch (status) {
+    case 'queued': return 'sms-status-queued';
+    case 'sending':
+    case 'processing': return 'sms-status-processing';
+    case 'submitted': return 'sms-status-submitted';
+    case 'delivered': return 'sms-status-delivered';
+    case 'failed': return 'danger';
+    default: return 'sms-status-unknown';
+  }
+}
+
 function escapeHtml(value: string): string {
   // Dashboard markup is assembled with templates, so dynamic database/local values must be escaped first.
   return value.replace(/[&<>"']/g, (character) => ({
@@ -397,7 +409,7 @@ export function renderDashboard() {
                 <span class="muted">${item.message}</span>
               </div>
               <div style="display:flex; flex-direction:column; align-items:flex-end; gap:6px;">
-                <span class="pill ${item.status === 'delivered' || item.status === 'submitted' ? '' : 'danger'}">${item.status}</span>
+                <span class="pill sms-status ${getSmsStatusClass(item.status)}">${item.status}</span>
                 <span class="muted" style="font-size: 0.72rem;">${item.createdAt ? new Date(item.createdAt).toLocaleDateString() : 'Unknown date'}</span>
               </div>
             </li>
@@ -416,7 +428,7 @@ export function renderDashboard() {
               <div class="sms-history-content">
                 <div class="sms-history-meta">
                   <strong>${escapeHtml(item.groupName || item.to)}</strong>
-                  <span class="pill history-status-pill ${item.status === 'failed' ? 'danger' : ''}">${escapeHtml(item.status)}</span>
+                  <span class="pill sms-status history-status-pill ${getSmsStatusClass(item.status)}">${escapeHtml(item.status)}</span>
                   <time class="muted" datetime="${escapeHtml(item.createdAt ?? '')}">${formatSmsTimestamp(item.createdAt)}</time>
                 </div>
                 <p class="sms-history-message">${escapeHtml(item.message)}</p>
@@ -873,6 +885,11 @@ export function renderDashboard() {
         white-space: nowrap;
       }
       .danger { background: rgba(248, 113, 113, 0.12); color: #fecaca; }
+      .sms-status-queued { background: rgba(251, 191, 36, 0.14); color: #fde68a; }
+      .sms-status-processing { background: rgba(34, 211, 238, 0.12); color: #a5f3fc; }
+      .sms-status-submitted { background: rgba(96, 165, 250, 0.16); color: #bfdbfe; }
+      .sms-status-delivered { background: rgba(52, 211, 153, 0.14); color: #bbf7d0; }
+      .sms-status-unknown { background: rgba(148, 163, 184, 0.12); color: #cbd5e1; }
       .stack { display: grid; gap: 12px; }
       .actions { display: flex; gap: 8px; flex-wrap: wrap; }
       .actions button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; flex: 1; }
@@ -1043,7 +1060,7 @@ export function renderDashboard() {
                             <span class="muted sms-log-excerpt">${createSmsExcerpt(item.message)}</span>
                           </div>
                           <div class="sms-log-meta">
-                            <span class="pill ${item.status === 'delivered' ? '' : 'danger'}">${item.status}</span>
+                            <span class="pill sms-status ${getSmsStatusClass(item.status)}">${item.status}</span>
                             <span class="muted" style="font-size: 0.72rem; white-space: nowrap;">${formatSmsTimestamp(item.createdAt)}</span>
                           </div>
                         </li>
