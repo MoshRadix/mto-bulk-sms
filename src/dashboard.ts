@@ -556,6 +556,7 @@ export function renderDashboard() {
       .app-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 12px; padding: 10px 2px 0; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.68rem; font-variant-numeric: tabular-nums; }
       .app-meta-version { padding: 4px 7px; border: 1px solid rgba(45, 212, 191, 0.24); border-radius: 999px; color: #8dded2; font-weight: 700; white-space: nowrap; }
       .app-meta time { white-space: nowrap; }
+      .app-meta-developer { grid-column: 1 / -1; color: #8dded2; font-size: 0.64rem; font-weight: 700; text-align: right; }
       .mini-card {
         background: rgba(148,163,184,0.06);
         border: 1px solid var(--line);
@@ -950,6 +951,7 @@ export function renderDashboard() {
             <div class="app-meta" aria-label="Application information">
               <span class="app-meta-version">v${packageInfo.version}</span>
               <time datetime="${localDateIso}">${currentDateLabel}</time>
+              <span class="app-meta-developer">Developed by M0SH</span>
             </div>
           </div>
         </aside>

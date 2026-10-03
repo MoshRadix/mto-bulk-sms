@@ -1,16 +1,14 @@
 # MTO Bulk SMS Manager
-Electron desktop app for Maradhoo Town Office (MTO), Addu City Council, Maldives.
-
-## Status: Phase 1 (foundation)
-Scaffold, Mongoose schemas (indexes, soft delete, schema versioning), AES-256-GCM crypto, keytar-backed
-credential store, runtime DB connection (Main process only), secure IPC whitelist, Maldives number validation, tests.
+Windows Electron desktop app for Maradhoo Town Office (MTO), Addu City Council, Maldives. Developed by M0SH.
 
 ## Run
     npm install
-    npm run build:electron
-    npm run dev        # Vite
-    npx electron .     # second terminal, with VITE_DEV_SERVER_URL=http://localhost:5173
+    npm run start      # Build and launch the Electron app
     npm test
+
+On first launch, enter the MongoDB connection details and create an administrator account. Choose a strong administrator password of at least 12 characters. The optional remember setting stores the username only, never the password.
+
+For renderer-only development, run `npm run dev`. Create the Windows installer with `npm run dist`; the setup executable is written to `dist/` and creates Desktop and Start Menu shortcuts.
 
 ## Releasing updates
 Windows packaged builds check GitHub Releases at startup, download newer versions in the background, and prompt to restart when ready. To publish an update:

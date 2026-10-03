@@ -5,22 +5,42 @@ import { renderIcons } from './shared/icons';
 
 const REMEMBERED_LOGIN_KEY = 'mto-bulk-sms.remembered-login';
 
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (character) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  })[character] ?? character);
+}
+
 function getRememberedLogin() {
   try {
     const raw = typeof window !== 'undefined' ? window.localStorage.getItem(REMEMBERED_LOGIN_KEY) : null;
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as { username?: string; password?: string };
-    if (!parsed.username || !parsed.password) return null;
-    return { username: parsed.username, password: parsed.password };
+    const parsed = JSON.parse(raw) as { username?: string };
+    if (typeof parsed.username !== 'string' || !parsed.username.trim()) {
+      window.localStorage.removeItem(REMEMBERED_LOGIN_KEY);
+      return null;
+    }
+    // Migrate older entries by retaining only the username, never the plaintext password.
+    window.localStorage.setItem(REMEMBERED_LOGIN_KEY, JSON.stringify({ username: parsed.username }));
+    return { username: parsed.username.trim() };
   } catch {
+    try {
+      window.localStorage.removeItem(REMEMBERED_LOGIN_KEY);
+    } catch {
+      return null;
+    }
     return null;
   }
 }
 
-function saveRememberedLogin(username: string, password: string) {
+function saveRememberedLogin(username: string) {
   try {
     if (typeof window === 'undefined') return;
-    window.localStorage.setItem(REMEMBERED_LOGIN_KEY, JSON.stringify({ username, password }));
+    window.localStorage.setItem(REMEMBERED_LOGIN_KEY, JSON.stringify({ username }));
   } catch {
     // ignore permission/storage errors
   }
@@ -35,8 +55,9 @@ function clearRememberedLogin() {
   }
 }
 
-export function renderSetup(message = 'Configure MongoDB to continue.') {
+export function renderSetup(message = 'Configure MongoDB to continue.', administratorSetupOnly = false) {
   state.view = 'setup';
+  let setupPhase: 'database' | 'administrator' = administratorSetupOnly ? 'administrator' : 'database';
   root.innerHTML = `
     <style>
       :root { --panel: rgba(15, 23, 42, 0.9); --border: rgba(255,255,255,0.09); --text: #e5e7eb; --muted: #9ca3af; --accent: #38bdf8; }
@@ -58,28 +79,52 @@ export function renderSetup(message = 'Configure MongoDB to continue.') {
       @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
       .small { color: var(--muted); margin-top: 12px; font-size: 0.8rem; }
       .warning { color: #fbbf24; }
+      .developer-credit { margin: 20px 0 0; color: #8dded2; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; text-align: center; text-transform: uppercase; }
+      fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
     </style>
     <div class="login-shell">
       <div class="login-card">
         <div class="brand"><img class="brand-mark" src="../assets/addu%20city%20logo.png" alt="City of Addu logo, the finest" /><span>MTO Bulk SMS Manager</span></div>
-        <h1 class="screen-title">Database setup required</h1>
-        <div class="sub">Set up MongoDB credentials before the app can create the admin account and unlock login.</div>
+        <h1 class="screen-title">First-time setup</h1>
+        <div class="sub" id="setup-description">${administratorSetupOnly ? 'Create the administrator account for this database.' : 'Connect your database to check whether an administrator account is already set up.'}</div>
         <form id="setup-bootstrap-form">
-          <div>
-            <label for="setup-db-username">DB username</label>
-            <input id="setup-db-username" name="username" autocomplete="username" placeholder="mongodb user" required />
-          </div>
-          <div style="margin-top: 14px;">
-            <label for="setup-db-password">DB password</label>
-            <input id="setup-db-password" name="password" type="password" autocomplete="new-password" placeholder="••••••••" required />
-          </div>
-          <div style="margin-top: 14px;">
-            <label for="setup-db-host">DB host</label>
-            <input id="setup-db-host" name="host" autocomplete="url" placeholder="cluster.mongodb.net" />
-          </div>
-          <button type="submit"><i data-lucide="database"></i>Save database settings</button>
+          <fieldset id="setup-database-fields" ${administratorSetupOnly ? 'disabled hidden' : ''}>
+            <div>
+              <label for="setup-db-username">Database username</label>
+              <input id="setup-db-username" name="dbUsername" autocomplete="off" placeholder="MongoDB username" required />
+            </div>
+            <div style="margin-top: 14px;">
+              <label for="setup-db-password">Database password</label>
+              <input id="setup-db-password" name="dbPassword" type="password" autocomplete="new-password" placeholder="Database password" required />
+            </div>
+            <div style="margin-top: 14px;">
+              <label for="setup-db-host">Database host</label>
+              <input id="setup-db-host" name="dbHost" autocomplete="url" placeholder="cluster.mongodb.net" />
+            </div>
+          </fieldset>
+          <fieldset id="setup-admin-fields" ${administratorSetupOnly ? '' : 'disabled hidden'} style="margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border);">
+            <strong style="font-size: 0.9rem;">Administrator account</strong>
+            <div style="margin-top: 14px;">
+              <label for="setup-admin-name">Full name</label>
+              <input id="setup-admin-name" name="adminName" autocomplete="name" placeholder="Administrator name" required />
+            </div>
+            <div style="margin-top: 14px;">
+              <label for="setup-admin-username">Username</label>
+              <input id="setup-admin-username" name="adminUsername" autocomplete="username" placeholder="Choose a username" required />
+            </div>
+            <div style="margin-top: 14px;">
+              <label for="setup-admin-email">Email</label>
+              <input id="setup-admin-email" name="adminEmail" type="email" autocomplete="email" placeholder="name@example.com" required />
+            </div>
+            <div style="margin-top: 14px;">
+              <label for="setup-admin-password">Administrator password</label>
+              <input id="setup-admin-password" name="adminPassword" type="password" autocomplete="new-password" minlength="12" placeholder="At least 12 characters" required />
+            </div>
+            </fieldset>
+                  <button type="submit"><i data-lucide="database"></i><span id="setup-submit-label">${administratorSetupOnly ? 'Create administrator' : 'Connect database'}</span></button>
         </form>
         <div id="setup-message" class="small warning">${message}</div>
+        <p class="developer-credit">Developed by M0SH</p>
       </div>
     </div>
   `;
@@ -90,10 +135,16 @@ export function renderSetup(message = 'Configure MongoDB to continue.') {
     event.preventDefault();
     const form = event.currentTarget as HTMLFormElement;
     const formData = new FormData(form);
-    const payload = {
-      username: String(formData.get('username') ?? '').trim(),
-      password: String(formData.get('password') ?? ''),
-      host: String(formData.get('host') ?? '').trim() || undefined,
+    const database = {
+      username: String(formData.get('dbUsername') ?? '').trim(),
+      password: String(formData.get('dbPassword') ?? ''),
+      host: String(formData.get('dbHost') ?? '').trim() || undefined,
+    };
+    const administrator = {
+      name: String(formData.get('adminName') ?? '').trim(),
+      username: String(formData.get('adminUsername') ?? '').trim(),
+      email: String(formData.get('adminEmail') ?? '').trim(),
+      password: String(formData.get('adminPassword') ?? ''),
     };
     const message = document.getElementById('setup-message');
     const appApi = apiClient();
@@ -102,11 +153,45 @@ export function renderSetup(message = 'Configure MongoDB to continue.') {
       if (!appApi) {
         throw new Error('This app requires the Electron runtime. Run npm run start to launch the live app.');
       }
-      notifyStatus(message, 'Saving database settings and creating the admin user...');
-      await appApi.invoke('setup:bootstrap', payload);
-      notifyStatus(message, 'Database settings saved. Redirecting to login...', 'success');
+      notifyStatus(message, 'Connecting to the database and creating your administrator account...');
+      if (setupPhase === 'database') {
+        notifyStatus(message, 'Connecting to the database...');
+        await appApi.invoke('setup:save-db', database);
+        const status = await appApi.invoke('setup:status') as { ready: boolean; databaseConnected: boolean; message?: string };
+        if (status.ready) {
+          state.view = 'login';
+          renderLogin();
+          showAppNotification('Connected to the existing database.', 'success');
+          return;
+        }
+        if (!status.databaseConnected) throw new Error(status.message ?? 'Could not connect to the database.');
+
+        setupPhase = 'administrator';
+        const databaseFields = document.getElementById('setup-database-fields') as HTMLFieldSetElement | null;
+        const administratorFields = document.getElementById('setup-admin-fields') as HTMLFieldSetElement | null;
+        if (databaseFields) {
+          databaseFields.disabled = true;
+          databaseFields.hidden = true;
+        }
+        if (administratorFields) {
+          administratorFields.disabled = false;
+          administratorFields.hidden = false;
+        }
+        const description = document.getElementById('setup-description');
+        if (description) description.textContent = status.message ?? 'Create the administrator account for this database.';
+        const submitLabel = document.getElementById('setup-submit-label');
+        if (submitLabel) submitLabel.textContent = 'Create administrator';
+        const nameInput = document.getElementById('setup-admin-name') as HTMLInputElement | null;
+        nameInput?.focus();
+        notifyStatus(message, status.message ?? 'Database connected. Create the first administrator account.', 'info');
+        return;
+      }
+
+      notifyStatus(message, 'Creating your administrator account...');
+      await appApi.invoke('setup:bootstrap', administrator);
+      notifyStatus(message, 'Setup complete. Redirecting to login...', 'success');
       state.view = 'login';
-      state.status = 'Database ready. Sign in with the admin account.';
+      state.status = 'Database ready. Sign in with your administrator account.';
       setTimeout(() => renderLogin(), 300);
     } catch (error) {
       notifyStatus(message, error instanceof Error ? error.message : 'Unable to save database settings.', 'error');
@@ -152,6 +237,7 @@ export function renderLogin() {
       button:disabled { cursor: not-allowed; opacity: 0.55; }
       @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
       .small { color: var(--muted); margin-top: 12px; font-size: 0.8rem; }
+      .developer-credit { margin: 20px 0 0; color: #8dded2; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; text-align: center; text-transform: uppercase; }
       .remember-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 12px; }
       .remember-row label { margin: 0; color: var(--muted); font-size: 0.8rem; display: flex; align-items: center; gap: 8px; }
       .remember-row input[type='checkbox'] { width: auto; margin: 0; }
@@ -167,22 +253,23 @@ export function renderLogin() {
         <form id="login-form">
           <div>
             <label for="login-username">Username</label>
-            <input id="login-username" name="username" autocomplete="username" value="${rememberedLogin?.username ?? ''}" placeholder="Enter your username" required />
+            <input id="login-username" name="username" autocomplete="username" value="${escapeHtml(rememberedLogin?.username ?? '')}" placeholder="Enter your username" required />
           </div>
           <div style="margin-top: 14px;">
             <label for="login-password">Password</label>
-            <input id="login-password" name="password" type="password" autocomplete="current-password" value="${rememberedLogin?.password ?? ''}" placeholder="Enter your password" required />
+            <input id="login-password" name="password" type="password" autocomplete="current-password" placeholder="Enter your password" required />
           </div>
           <div class="remember-row">
             <label>
               <input name="remember-login" type="checkbox" ${rememberedLogin ? 'checked' : ''} />
-              Remember me
+              Remember username
             </label>
             ${rememberedLogin ? '<button id="forget-login-button" type="button" class="link-action"><i data-lucide="x"></i>Forget saved login</button>' : ''}
           </div>
           <button type="submit"><i data-lucide="log-in"></i>Log in</button>
         </form>
         <div id="login-message" class="small">Use the username and password assigned to your account.</div>
+        <p class="developer-credit">Developed by M0SH</p>
       </div>
     </div>
   `;
@@ -207,7 +294,7 @@ export function renderLogin() {
       const result = await appApi.invoke('auth:login', { username, password });
       if (result && typeof result === 'object' && 'username' in result) {
         if (rememberLogin) {
-          saveRememberedLogin(username, password);
+          saveRememberedLogin(username);
         } else {
           clearRememberedLogin();
         }
@@ -240,13 +327,13 @@ export async function initializeApp() {
   }
 
   try {
-    const status = await appApi.invoke('setup:status') as { ready: boolean; message?: string };
+    const status = await appApi.invoke('setup:status') as { ready: boolean; message?: string; configured: boolean; databaseConnected: boolean };
     if (status.ready) {
       state.view = 'login';
       renderLogin();
       return;
     }
-    renderSetup(status.message ?? 'Database credentials are required before login.');
+    renderSetup(status.message ?? 'Database credentials are required before login.', status.databaseConnected);
   } catch (error) {
     renderSetup(error instanceof Error ? error.message : 'Database setup is required before login.');
   }

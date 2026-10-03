@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "description": "Bulk SMS management for Maradhoo Town Office, Addu City Council",
   "license": "ISC",
-  "author": "Maradhoo Town Office (MTO)",
+  "author": "M0SH",
   "type": "commonjs",
   "main": "dist-electron/main.js",
   "scripts": {

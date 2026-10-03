@@ -9,6 +9,12 @@ const DbCreds = z.object({
   password: z.string().min(1),
   host: z.string().trim().optional().transform((value) => (value && value.trim() ? value.trim() : undefined)),
 });
+const SetupBootstrapInput = z.object({
+  name: z.string().trim().min(1),
+  username: z.string().trim().min(1).toLowerCase(),
+  email: z.string().trim().email().toLowerCase(),
+  password: z.string().min(12),
+});
 const SmsConfig = z.object({
   username: z.string().trim().min(1).optional(),
   user: z.string().trim().min(1).optional(),
@@ -286,18 +292,14 @@ export function parseDhiraaguStatus(xml: string): { messageId: string; messageKe
 
 async function ensureDbReady() {
   await connectDatabase();
-  const { models } = await import('../db/models');
-  const exists = await models.User.findOne({ username: 'admin' }).lean();
-  if (!exists) {
-    await models.User.create({
-      name: 'System Administrator',
-      username: 'admin',
-      email: 'admin@mto.gov.mv',
-      passwordHash: await bcrypt.hash('admin123', 10),
-      role: 'administrator',
-      active: true,
-    });
-  }
+}
+
+async function usesLegacyDefaultAdminPassword(admin: { username?: string; passwordHash?: string } | null): Promise<boolean> {
+  return Boolean(
+    admin?.username === 'admin'
+    && admin.passwordHash
+    && await bcrypt.compare('admin123', admin.passwordHash),
+  );
 }
 
 async function getDhiraaguAuthRecord() {
@@ -306,27 +308,37 @@ async function getDhiraaguAuthRecord() {
   return models.DhiraaguAuth.findOne({}).lean() as Promise<{ user?: string; password?: string } | null>;
 }
 
-export async function getSetupStatus(): Promise<{ configured: boolean; ready: boolean; message: string }> {
+export async function getSetupStatus(): Promise<{ configured: boolean; databaseConnected: boolean; ready: boolean; message: string }> {
   const username = await loadSecret('db.username');
   const password = await loadSecret('db.password');
   const configured = Boolean(username && password);
 
   if (!configured) {
-    return { configured: false, ready: false, message: 'Database credentials are not configured yet.' };
+    return { configured: false, databaseConnected: false, ready: false, message: 'Database credentials are not configured yet.' };
   }
 
   try {
     await connectDatabase();
     const { models } = await import('../db/models');
-    const adminExists = Boolean(await models.User.findOne({ username: 'admin' }).lean());
+    const admin = await models.User.findOne({ role: 'administrator', active: true, deletedAt: null })
+      .select('username passwordHash')
+      .lean();
+    const requiresCredentialReset = await usesLegacyDefaultAdminPassword(admin);
+    const adminExists = Boolean(admin) && !requiresCredentialReset;
     return {
       configured: true,
+      databaseConnected: true,
       ready: adminExists,
-      message: adminExists ? 'Database and admin user are ready.' : 'Admin user needs to be created.',
+      message: requiresCredentialReset
+        ? 'The default administrator password must be replaced before continuing.'
+        : adminExists
+          ? 'Database and administrator account are ready.'
+          : 'Create the first administrator account to continue.',
     };
   } catch (error) {
     return {
       configured: true,
+      databaseConnected: false,
       ready: false,
       message: error instanceof Error ? error.message : 'Unable to connect to the configured database.',
     };
@@ -346,12 +358,28 @@ export function registerSetupIpc() {
   ipcMain.handle('setup:test-db', () => testConnection());
   ipcMain.handle('setup:init-db', async () => { await initializeCollections(); return { ok: true }; });
   ipcMain.handle('setup:bootstrap', async (_e, raw) => {
-    const c = DbCreds.parse(raw);
-    await saveSecret('db.username', c.username);
-    await saveSecret('db.password', c.password);
-    if (c.host) await saveSecret('db.host', c.host);
+    const administrator = SetupBootstrapInput.parse(raw);
     await initializeCollections();
-    await ensureDbReady();
+    await connectDatabase();
+    const { models } = await import('../db/models');
+    const existingAdmin = await models.User.findOne({ role: 'administrator', active: true, deletedAt: null });
+    if (existingAdmin && !(await usesLegacyDefaultAdminPassword(existingAdmin))) {
+      throw new Error('An administrator account already exists. Sign in instead of running first-time setup again.');
+    }
+    const secureAdmin = {
+      name: administrator.name,
+      username: administrator.username,
+      email: administrator.email,
+      passwordHash: await bcrypt.hash(administrator.password, 12),
+      role: 'administrator',
+      active: true,
+    };
+    if (existingAdmin) {
+      await models.User.updateOne({ _id: existingAdmin._id }, { $set: secureAdmin });
+    } else {
+      // Bootstrap creates an administrator only from explicit credentials, never a public default password.
+      await models.User.create(secureAdmin);
+    }
     return { ok: true };
   });
 
@@ -890,6 +918,7 @@ export function registerSetupIpc() {
     const sentMessages: Array<{ id: string; to: string; message: string; status: string; groupName: string | null; createdAt: string | null }> = [];
 
     for (const queuedItem of queued) {
+    // Atomically claim a queued log so overlapping send requests cannot submit it twice.
     const item = await models.SmsLog.findOneAndUpdate(
       { _id: queuedItem._id, ...queueFilter },
       { $set: { status: 'sending' } },
