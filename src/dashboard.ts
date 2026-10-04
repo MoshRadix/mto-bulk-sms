@@ -1,9 +1,10 @@
 import { apiClient, getValidContactCount, root, state, type Contact, type SmsCursor, type SmsItem, type SmsPage } from './app';
-import { isValidMvMobile, normalizeMvNumber, parseMvMobileList } from './shared/phone';
+import { formatMvNumberForDisplay, isValidMvMobile, normalizeMvNumber, parseMvMobileList } from './shared/phone';
 import { countSmsCharacters, createSmsExcerpt, SMS_MESSAGE_LIMIT, truncateSmsMessage } from './shared/sms';
 import { exportContactsCsv, exportSmsLogsCsv, filterSmsLogs, parseContactsCsv } from './shared/reporting';
 import { clearSmsHistoryPagesAfter, getStoredSmsHistoryPage, saveSmsHistoryPage, type StoredSmsHistoryPage } from './shared/smsHistory';
 import { deleteLocalSmsTemplate, listLocalSmsTemplates, saveLocalSmsTemplate, type LocalSmsTemplate } from './shared/smsTemplates';
+import { listLocalGroups, saveLocalGroup, deleteLocalGroup, listLocalContacts, saveLocalContact, deleteLocalContact, type LocalGroup, type LocalContact } from './shared/localGroups';
 import { notifyStatus } from './shared/notifications';
 import { bindSettingsTabs, attachSettingsHandlers } from './settings';
 import { renderIcons } from './shared/icons';
@@ -18,6 +19,8 @@ let templatesLoadingUserId = '';
 let templatesLoadError: string | null = null;
 let templatesLoadToken = 0;
 let editingLocalSmsTemplateId: string | null = null;
+let localGroups: LocalGroup[] = [];
+let localContacts: LocalContact[] = [];
 
 type UniqueContactRow = { contact: Contact; contactIds: string[]; groupNames: string[] };
 
@@ -55,6 +58,13 @@ function escapeHtml(value: string): string {
     '"': '&quot;',
     "'": '&#39;',
   })[character] ?? character);
+}
+
+function formatQueuedRecipientsForDisplay(value: string, maxRecipients = 3): string {
+  const recipients = formatMvNumberForDisplay(value).split(',').map((recipient) => recipient.trim()).filter(Boolean);
+  return recipients.length > maxRecipients
+    ? `${recipients.slice(0, maxRecipients).join(', ')}, ...`
+    : recipients.join(', ');
 }
 
 async function copyTextToClipboard(value: string): Promise<void> {
@@ -107,7 +117,6 @@ export async function loadDashboardData() {
   const appApi = apiClient();
   state.view = 'dashboard';
   if (!appApi) {
-    // Browser preview intentionally has no database-backed demo identity or writable data.
     state.contacts = [];
     state.groups = [];
     state.sms = [];
@@ -125,23 +134,61 @@ export async function loadDashboardData() {
   }
 
   try {
-    // Load the visible dashboard's independent resources together, then publish one consistent state snapshot.
-    const [contacts, groups, smsPage, users] = await Promise.all([
+    const [contacts, groups, smsPage, users, localGroupsData, localContactsData] = await Promise.all([
       appApi.invoke('contacts:list') as Promise<Array<{ id: string; name: string; mobile: string; department: string; groupId?: string; groupName?: string }>>,
       appApi.invoke('groups:list') as Promise<Array<{ id: string; name: string; description: string; memberCount: number }>>,
       appApi.invoke('sms:list', { limit: SMS_PAGE_SIZE }) as Promise<SmsPage>,
       appApi.invoke('users:list') as Promise<Array<{ id: string; username: string; name: string; email: string; role: 'administrator' | 'user'; active: boolean }>>,
+      listLocalGroups(state.user?.id ?? ''),
+      listLocalContacts(state.user?.id ?? ''),
     ]);
 
-    state.contacts = contacts.map((item) => ({
+    const canManageLocalData = state.user?.role !== 'administrator';
+    localGroups = canManageLocalData ? localGroupsData : [];
+    localContacts = canManageLocalData ? localContactsData : [];
+
+    const globalContacts = contacts.map((item) => ({
       id: item.id,
       name: item.name,
       mobile: item.mobile,
       department: item.department ?? '',
       groupId: item.groupId ?? '',
       groupName: item.groupName ?? 'Unassigned',
+      isLocal: false,
     }));
-    state.groups = groups.map((item) => ({ id: item.id, name: item.name, description: item.description ?? '', memberCount: item.memberCount ?? 0 }));
+
+    const localContactsWithGroupNames = localContacts.map((item) => {
+      const group = localGroups.find((g) => g.id === item.groupId);
+      return {
+        id: `local:${item.id}`,
+        name: item.name,
+        mobile: item.mobile,
+        department: item.department,
+        groupId: item.groupId ? `local:${item.groupId}` : '',
+        groupName: group ? group.name : 'Unassigned',
+        isLocal: true,
+      };
+    });
+
+    state.contacts = [...globalContacts, ...localContactsWithGroupNames];
+
+    const globalGroups = groups.map((item) => ({ 
+      id: item.id, 
+      name: item.name, 
+      description: item.description ?? '', 
+      memberCount: item.memberCount ?? 0,
+      isLocal: false,
+    }));
+
+    const localGroupsWithCounts = localGroups.map((item) => ({
+      id: `local:${item.id}`,
+      name: item.name,
+      description: item.description,
+      memberCount: localContacts.filter((c) => c.groupId === item.id).length,
+      isLocal: true,
+    }));
+
+    state.groups = [...globalGroups, ...localGroupsWithCounts];
     state.sms = smsPage.items;
     state.smsCursor = smsPage.nextCursor;
     state.smsHasMore = smsPage.hasMore;
@@ -339,7 +386,7 @@ export function renderDashboard() {
   const localDateIso = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')}`;
   const currentDateLabel = currentDate.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
   const isAdministrator = state.user.role === 'administrator';
-  const isCreatingGroup = isAdministrator && state.groupEditorMode === 'new';
+  const isCreatingGroup = state.groupEditorMode === 'new';
   const uniqueContacts = getUniqueContactRows(state.contacts);
   const stats = [
     { label: 'Unique contacts', value: String(uniqueContacts.length) },
@@ -356,9 +403,19 @@ export function renderDashboard() {
     : '<option value="">No groups yet</option>';
   const editingGroup = state.groups.find((group) => group.id === state.groupEditorId);
   const currentGroupMembers = state.contacts.filter((contact) => contact.groupId === state.groupEditorId);
-  const currentGroupNumbers = new Set(currentGroupMembers.map((contact) => contact.mobile));
-  // The same mobile can have separate group-scoped contact records; don't offer duplicate recipients to this group.
-  const availableGroupContacts = state.contacts.filter((contact) => contact.groupId !== state.groupEditorId && !currentGroupNumbers.has(contact.mobile));
+  const currentGroupNumbers = new Set(currentGroupMembers.map((contact) => normalizeMvNumber(contact.mobile)));
+  // Contacts are group-scoped records, so the same number may appear once per group (or in local and global data).
+  // The picker represents recipients, not records: show each available normalized mobile number only once.
+  const availableGroupContacts = Array.from(
+    state.contacts
+      .filter((contact) => contact.groupId !== state.groupEditorId && !currentGroupNumbers.has(normalizeMvNumber(contact.mobile)))
+      .reduce((contactsByMobile, contact) => {
+        const mobile = normalizeMvNumber(contact.mobile);
+        if (!contactsByMobile.has(mobile)) contactsByMobile.set(mobile, contact);
+        return contactsByMobile;
+      }, new Map<string, Contact>())
+      .values(),
+  );
 
   const adminNav = state.user?.role === 'administrator'
     ? `<button type="button" class="nav-tab ${state.activeSection === 'admin' ? 'active' : ''}" data-section="admin" aria-current="${state.activeSection === 'admin' ? 'page' : 'false'}"><i data-lucide="shield-check"></i>Admin</button>`
@@ -425,7 +482,7 @@ export function renderDashboard() {
           (item) => `
             <li>
               <div>
-                <strong>${item.groupName || item.to}</strong><br />
+                <strong>${escapeHtml(item.groupName || formatMvNumberForDisplay(item.to))}</strong><br />
                 <span class="muted">${item.message}</span>
               </div>
               <div style="display:flex; flex-direction:column; align-items:flex-end; gap:6px;">
@@ -447,13 +504,13 @@ export function renderDashboard() {
             <li class="sms-history-row">
               <div class="sms-history-content">
                 <div class="sms-history-meta">
-                  <strong>${escapeHtml(item.groupName || item.to)}</strong>
+                  <strong>${escapeHtml(item.groupName || formatMvNumberForDisplay(item.to))}</strong>
                   <span class="pill sms-status history-status-pill ${getSmsStatusClass(item.status)}">${escapeHtml(item.status)}</span>
                   <time class="muted" datetime="${escapeHtml(item.createdAt ?? '')}">${formatSmsTimestamp(item.createdAt)}</time>
                 </div>
                 <p class="sms-history-message">${escapeHtml(item.message)}</p>
               </div>
-              <button type="button" class="secondary sms-history-copy" data-copy-sms-id="${escapeHtml(item.id)}" title="Copy message" aria-label="Copy message sent to ${escapeHtml(item.groupName || item.to)}"><i data-lucide="copy"></i></button>
+              <button type="button" class="secondary sms-history-copy" data-copy-sms-id="${escapeHtml(item.id)}" title="Copy message" aria-label="Copy message sent to ${escapeHtml(item.groupName || formatMvNumberForDisplay(item.to))}"><i data-lucide="copy"></i></button>
             </li>
           `).join('')
         : '<li class="sms-history-state"><i data-lucide="history"></i><strong>No sent messages yet</strong><span class="muted">Messages sent from this account will appear here.</span></li>';
@@ -795,13 +852,16 @@ export function renderDashboard() {
       .group-member-section h3 { margin: 0 0 8px; font-size: 0.92rem; }
       .group-member-list, .group-directory-list { display: grid; gap: 7px; }
       .group-member-row, .group-directory-row { gap: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: rgba(15, 23, 42, 0.58); }
+      .group-directory-row { display: grid; gap: 8px; }
       .group-member-details, .group-directory-details { min-width: 0; overflow-wrap: anywhere; }
       .group-member-details .muted, .group-directory-details .muted { display: block; margin-top: 3px; font-size: 0.78rem; }
+      .group-directory-title { display: flex; align-items: center; gap: 8px; min-width: 0; flex-wrap: wrap; }
+      .group-directory-title strong { overflow-wrap: anywhere; }
       .group-directory-row[hidden] { display: none; }
       .group-directory-heading { margin-bottom: 14px; }
       .group-directory-search { margin-bottom: 12px; }
-      .group-row-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 10px; }
-      .group-member-count { min-width: 76px; color: var(--muted); font-size: 0.78rem; text-align: right; }
+      .group-row-actions { display: flex; align-items: center; justify-content: flex-start; gap: 10px; flex-wrap: wrap; padding-top: 8px; border-top: 1px solid var(--line); }
+      .group-member-count { margin-right: auto; color: var(--muted); font-size: 0.78rem; }
       .group-member-picker-section { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line); }
       .group-picker-heading { align-items: flex-end; margin-bottom: 8px; }
       .group-picker-heading label { margin: 0; }
@@ -1045,7 +1105,7 @@ export function renderDashboard() {
             <form id="sms-form" class="stack">
               <div>
                 <label for="sms-recipient-numbers">Recipient numbers</label>
-                <input id="sms-recipient-numbers" name="to" inputmode="tel" placeholder="9607712345, 9609912345" />
+                <input id="sms-recipient-numbers" name="to" inputmode="tel" placeholder="7712345, 7991234" />
               </div>
               <div>
                 <label for="sms-group">Send to group</label>
@@ -1079,13 +1139,13 @@ export function renderDashboard() {
                       (item) => `
                         <li>
                           <div class="sms-log-message">
-                            <strong>${item.groupName || item.to}</strong><br />
+                            <strong>${escapeHtml(item.groupName || formatQueuedRecipientsForDisplay(item.to))}</strong><br />
                             <span class="muted sms-log-excerpt">${createSmsExcerpt(item.message)}</span>
                           </div>
                           <div class="sms-log-meta">
                             <div class="sms-log-status-row">
                               <span class="pill sms-status ${getSmsStatusClass(item.status)}">${item.status}</span>
-                              ${item.status === 'queued' ? `<button type="button" class="secondary sms-log-remove" data-unqueue-sms-id="${escapeHtml(item.id)}" title="Remove from queue" aria-label="Remove queued message to ${escapeHtml(item.to)}"><i data-lucide="trash-2"></i></button>` : ''}
+                              ${item.status === 'queued' ? `<button type="button" class="secondary sms-log-remove" data-unqueue-sms-id="${escapeHtml(item.id)}" title="Remove from queue" aria-label="Remove queued message to ${escapeHtml(formatQueuedRecipientsForDisplay(item.to))}"><i data-lucide="trash-2"></i></button>` : ''}
                             </div>
                             <span class="muted" style="font-size: 0.72rem; white-space: nowrap;">${formatSmsTimestamp(item.createdAt)}</span>
                           </div>
@@ -1182,7 +1242,7 @@ export function renderDashboard() {
               </div>
               <div>
                 <label for="contact-mobile">Mobile number</label>
-                <input id="contact-mobile" name="mobile" type="tel" autocomplete="tel" inputmode="tel" placeholder="9607712345" aria-describedby="contact-mobile-help" required />
+                <input id="contact-mobile" name="mobile" type="tel" autocomplete="tel" inputmode="tel" placeholder="7712345" aria-describedby="contact-mobile-help" required />
                 <small id="contact-mobile-help" class="muted">Enter a Maldives mobile number.</small>
               </div>
               <div class="row">
@@ -1199,8 +1259,11 @@ export function renderDashboard() {
                 <label for="contact-group">Group</label>
                 <select id="contact-group" name="groupId" required>
                   <option value="">Choose a group</option>
-                  ${state.groups.map((group) => `<option value="${escapeHtml(group.id)}">${escapeHtml(group.name)}</option>`).join('')}
+                  ${state.groups
+                    .filter((group) => isAdministrator || group.isLocal)
+                    .map((group) => `<option value="${escapeHtml(group.id)}">${escapeHtml(group.name)}${group.isLocal ? ' (Local)' : ' (Global)'}</option>`).join('')}
                 </select>
+                ${!isAdministrator ? '<small class="muted">Non-admin users can only add contacts to local groups.</small>' : ''}
               </div>
               <div>
                 <label for="contact-notes">Notes <span class="muted">(optional)</span></label>
@@ -1223,8 +1286,8 @@ export function renderDashboard() {
             </div>
             <div class="contact-toolbar">
               <div class="contact-toolbar-actions">
-                <button type="button" class="secondary" id="import-contacts-csv"><i data-lucide="upload"></i>Import CSV</button>
-                <button type="button" class="secondary" id="export-contacts-csv"><i data-lucide="download"></i>Export CSV</button>
+                <button type="button" class="secondary" id="import-contacts-csv"><i data-lucide="upload"></i>${isAdministrator ? 'Import CSV' : 'Import local CSV'}</button>
+                <button type="button" class="secondary" id="export-contacts-csv"><i data-lucide="download"></i>${isAdministrator ? 'Export CSV' : 'Export local CSV'}</button>
                 ${state.user?.role === 'administrator' ? '<button type="button" class="secondary" id="bulk-delete-contacts" disabled><i data-lucide="trash-2"></i><span id="bulk-delete-label">Delete selected</span></button>' : ''}
               </div>
               <div class="contact-search-wrap">
@@ -1236,19 +1299,19 @@ export function renderDashboard() {
             </div>
             <ul id="contact-list" class="contact-list">
               ${uniqueContacts.map(({ contact, contactIds, groupNames }) => `
-                <li class="contact-row" data-contact-search="${escapeHtml(`${contact.name} ${contact.mobile} ${contact.department} ${groupNames.join(' ')}`.toLocaleLowerCase())}">
+                <li class="contact-row" data-contact-search="${escapeHtml(`${contact.name} ${contact.mobile} ${formatMvNumberForDisplay(contact.mobile)} ${contact.department} ${groupNames.join(' ')}`.toLocaleLowerCase())}" data-contact-local="${contact.isLocal ? 'true' : 'false'}">
                   <div class="contact-identity">
                     <span class="contact-avatar" aria-hidden="true">${escapeHtml(contact.name.trim().slice(0, 1).toLocaleUpperCase() || '?')}</span>
                     <div class="contact-details">
-                      <strong>${escapeHtml(contact.name)}</strong>
-                      <span class="muted contact-subtitle">${escapeHtml(contact.mobile)} · ${escapeHtml(contact.department || 'No department')}</span>
+                      <strong>${escapeHtml(contact.name)} ${contact.isLocal ? '<span class="pill" style="font-size: 0.7rem; padding: 2px 6px;">Local</span>' : '<span class="pill" style="font-size: 0.7rem; padding: 2px 6px; background: #3b82f6; color: white;">Global</span>'}</strong>
+                      <span class="muted contact-subtitle">${escapeHtml(formatMvNumberForDisplay(contact.mobile))} · ${escapeHtml(contact.department || 'No department')}</span>
                       <span class="muted contact-subtitle">${escapeHtml(groupNames.length ? groupNames.join(', ') : 'No group')}</span>
                     </div>
                   </div>
                   <div class="contact-row-actions">
-                    ${state.user?.role === 'administrator'
+                    ${(state.user?.role === 'administrator' || contact.isLocal)
                       ? `
-                          <input type="checkbox" class="contact-bulk-select" value="${escapeHtml(contactIds.join(','))}" aria-label="Select ${escapeHtml(contact.name)}" />
+                          ${state.user?.role === 'administrator' && !contact.isLocal ? '<input type="checkbox" class="contact-bulk-select" value="' + escapeHtml(contactIds.join(',')) + '" aria-label="Select ' + escapeHtml(contact.name) + '" />' : ''}
                           <button type="button" class="link-action" data-contact-action="edit" data-contact-id="${escapeHtml(contact.id)}"><i data-lucide="pencil"></i>Edit</button>
                           <button type="button" class="link-action danger" data-contact-action="delete" data-contact-id="${escapeHtml(contact.id)}" data-contact-ids="${escapeHtml(contactIds.join(','))}"><i data-lucide="trash-2"></i>Delete</button>
                         `
@@ -1280,32 +1343,30 @@ export function renderDashboard() {
           <p id="groups-status" class="groups-status" role="status" aria-live="polite"></p>
           <div class="layout groups-workspace">
             <div class="groups-left-column">
-              ${isAdministrator ? `
-                <form id="group-form" class="card panel">
-                  <div class="group-form-heading">
-                    <div>
-                      <p class="group-eyebrow">Group details</p>
-                      <h2 id="group-form-title">${isCreatingGroup ? 'Create a group' : editingGroup ? 'Edit group' : 'Group details'}</h2>
-                      <p class="muted">${isCreatingGroup ? 'Name the group before adding contacts.' : editingGroup ? 'Update this group’s name or description.' : 'Choose a group below to edit its details.'}</p>
-                    </div>
-                    <button type="button" class="secondary" id="new-group-button"><i data-lucide="${isCreatingGroup ? 'x' : 'plus'}"></i>${isCreatingGroup ? 'Cancel' : 'New group'}</button>
+              <form id="group-form" class="card panel">
+                <div class="group-form-heading">
+                  <div>
+                    <p class="group-eyebrow">Group details ${editingGroup && !editingGroup.isLocal ? '<span class="pill" style="font-size: 0.7rem; padding: 2px 6px; background: #3b82f6; color: white;">Global</span>' : (!isAdministrator && (isCreatingGroup || editingGroup?.isLocal)) ? '<span class="pill" style="font-size: 0.7rem; padding: 2px 6px;">Local</span>' : ''}</p>
+                    <h2 id="group-form-title">${isCreatingGroup ? (isAdministrator ? 'Create a group' : 'Create a local group') : editingGroup ? 'Edit group' : 'Group details'}</h2>
+                    <p class="muted">${isCreatingGroup ? (isAdministrator ? 'Name the group before adding contacts. This group will be stored globally.' : 'Name the group before adding contacts. This group will be stored locally.') : editingGroup ? `Update this group's name or description.${editingGroup.isLocal ? ' This is a local group.' : ' This is a global group (admin only).'}` : 'Choose a group below to edit its details.'}</p>
                   </div>
-                  <div class="stack">
-                    <div>
-                      <label for="group-name">Group name</label>
-                      <input id="group-name" name="name" value="${escapeHtml(isCreatingGroup ? '' : editingGroup?.name ?? '')}" placeholder="e.g. Roadworks Team" autocomplete="off" required />
-                    </div>
-                    <div>
-                      <label for="group-description">Description <span class="muted">(optional)</span></label>
-                      <textarea id="group-description" name="description" placeholder="What is this group for?">${escapeHtml(isCreatingGroup ? '' : editingGroup?.description ?? '')}</textarea>
-                    </div>
-                    <div class="actions group-form-actions">
-                      <button type="submit" id="save-group-button" ${!isCreatingGroup && !editingGroup ? 'disabled' : ''}><i data-lucide="${isCreatingGroup ? 'plus' : 'check'}"></i>${isCreatingGroup ? 'Create group' : 'Save changes'}</button>
-                      <button type="button" class="secondary" id="reset-group-form"><i data-lucide="x"></i>${editingGroup || isCreatingGroup ? 'Cancel' : 'Clear selection'}</button>
-                    </div>
+                  <button type="button" class="secondary" id="new-group-button"><i data-lucide="${isCreatingGroup ? 'x' : 'plus'}"></i>${isCreatingGroup ? 'Cancel' : (isAdministrator ? 'New group' : 'New local group')}</button>
+                </div>
+                <div class="stack">
+                  <div>
+                    <label for="group-name">Group name</label>
+                    <input id="group-name" name="name" value="${escapeHtml(isCreatingGroup ? '' : editingGroup?.name ?? '')}" placeholder="e.g. Roadworks Team" autocomplete="off" ${editingGroup && !editingGroup.isLocal && !isAdministrator ? 'readonly' : ''} required />
                   </div>
-                </form>
-              ` : ''}
+                  <div>
+                    <label for="group-description">Description <span class="muted">(optional)</span></label>
+                    <textarea id="group-description" name="description" placeholder="What is this group for?" ${editingGroup && !editingGroup.isLocal && !isAdministrator ? 'readonly' : ''}>${escapeHtml(isCreatingGroup ? '' : editingGroup?.description ?? '')}</textarea>
+                  </div>
+                  <div class="actions group-form-actions">
+                    <button type="submit" id="save-group-button" ${!isCreatingGroup && !editingGroup ? 'disabled' : (editingGroup && !editingGroup.isLocal && !isAdministrator) ? 'disabled' : ''}><i data-lucide="${isCreatingGroup ? 'plus' : 'check'}"></i>${isCreatingGroup ? 'Create group' : 'Save changes'}</button>
+                    <button type="button" class="secondary" id="reset-group-form"><i data-lucide="x"></i>${editingGroup || isCreatingGroup ? 'Cancel' : 'Clear selection'}</button>
+                  </div>
+                </div>
+              </form>
 
               <section class="card panel group-directory-panel">
                 <div class="group-directory-heading">
@@ -1318,16 +1379,19 @@ export function renderDashboard() {
                 <p id="group-directory-count" class="muted" style="margin: 0 0 10px; font-size: 0.78rem;">${state.groups.length} group${state.groups.length === 1 ? '' : 's'}</p>
                 <ul id="group-list" class="group-directory-list">
                   ${state.groups.map((group) => `
-                    <li class="group-directory-row" data-group-search="${escapeHtml(`${group.name} ${group.description}`.toLocaleLowerCase())}">
+                    <li class="group-directory-row" data-group-search="${escapeHtml(`${group.name} ${group.description}`.toLocaleLowerCase())}" data-group-local="${group.isLocal ? 'true' : 'false'}">
                       <div class="group-directory-details">
-                        <strong>${escapeHtml(group.name)}</strong>
+                        <div class="group-directory-title">
+                          <strong>${escapeHtml(group.name)}</strong>
+                          ${group.isLocal ? '<span class="pill" style="font-size: 0.7rem; padding: 2px 6px;">Local</span>' : '<span class="pill" style="font-size: 0.7rem; padding: 2px 6px; background: #3b82f6; color: white;">Global</span>'}
+                        </div>
                         <span class="muted">${escapeHtml(group.description || 'No description')}</span>
                       </div>
                       <div class="group-row-actions">
                         <span class="group-member-count">${group.memberCount} member${group.memberCount === 1 ? '' : 's'}</span>
-                        <button type="button" class="link-action" data-group-action="manage" data-group-id="${escapeHtml(group.id)}"><i data-lucide="users-round"></i>Manage</button>
-                        ${state.user?.role === 'administrator'
+                        ${(state.user?.role === 'administrator' || group.isLocal)
                           ? `
+                              <button type="button" class="link-action" data-group-action="manage" data-group-id="${escapeHtml(group.id)}"><i data-lucide="users-round"></i>Manage</button>
                               <button type="button" class="link-action" data-group-action="edit" data-group-id="${escapeHtml(group.id)}"><i data-lucide="pencil"></i>Edit</button>
                               <button type="button" class="link-action danger" data-group-action="delete" data-group-id="${escapeHtml(group.id)}"><i data-lucide="trash-2"></i>Delete</button>
                             `
@@ -1363,19 +1427,21 @@ export function renderDashboard() {
                 ? '<div class="group-empty-state"><strong>Create the group first</strong>After saving its details, you can add contacts here.</div>'
                 : editingGroup
                   ? `
+                    ${!editingGroup.isLocal && state.user?.role !== 'administrator' ? '<div class="group-empty-state" style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border: 2px solid #f59e0b; color: #78350f; padding: 16px; border-radius: 8px; margin-bottom: 20px;"><strong style="display: block; font-size: 1.1em; margin-bottom: 8px; color: #92400e;">🔒 Global groups are read-only</strong><span style="color: #78350f;">Only administrators can add or remove members from global groups. You can create local groups to organize your contacts.</span></div>' : ''}
                     <div class="group-member-section">
                       <h3>Current members</h3>
                       <ul id="current-group-members" class="group-member-list">
                         ${currentGroupMembers.length
                           ? currentGroupMembers.map((contact) => `
                               <li class="group-member-row">
-                                <div class="group-member-details"><strong>${escapeHtml(contact.name)}</strong><span class="muted">${escapeHtml(contact.mobile)}</span></div>
-                                <button type="button" class="link-action danger" data-remove-group-member="${escapeHtml(contact.id)}" aria-label="Remove ${escapeHtml(contact.name)} from ${escapeHtml(editingGroup.name)}"><i data-lucide="user-minus"></i>Remove</button>
+                                <div class="group-member-details"><strong>${escapeHtml(contact.name)}</strong><span class="muted">${escapeHtml(formatMvNumberForDisplay(contact.mobile))}</span></div>
+                                ${(editingGroup.isLocal || state.user?.role === 'administrator') ? `<button type="button" class="link-action danger" data-remove-group-member="${escapeHtml(contact.id)}" aria-label="Remove ${escapeHtml(contact.name)} from ${escapeHtml(editingGroup.name)}"><i data-lucide="user-minus"></i>Remove</button>` : ''}
                               </li>
                             `).join('')
                           : '<li class="group-empty-state"><strong>No members in this group</strong>Search available contacts below to add the first member.</li>'}
                       </ul>
                     </div>
+                    ${(editingGroup.isLocal || state.user?.role === 'administrator') ? `
                     <div class="group-member-picker-section">
                       <div class="group-picker-heading">
                         <label for="group-member-search">Add contacts</label>
@@ -1385,9 +1451,9 @@ export function renderDashboard() {
                       <p id="group-member-results" class="group-member-results" aria-live="polite"></p>
                       <div id="group-member-picker" class="member-picker">
                         ${availableGroupContacts.map((contact) => `
-                          <label class="member-option" data-member-search="${escapeHtml(`${contact.name} ${contact.mobile} ${contact.groupName || ''}`.toLocaleLowerCase())}">
+                          <label class="member-option" data-member-search="${escapeHtml(`${contact.name} ${contact.mobile} ${formatMvNumberForDisplay(contact.mobile)} ${contact.groupName || ''}`.toLocaleLowerCase())}">
                             <input type="checkbox" name="add-members" value="${escapeHtml(contact.id)}" />
-                            <span><strong>${escapeHtml(contact.name)}</strong><small>${escapeHtml(contact.mobile)} · ${escapeHtml(contact.groupName || 'Unassigned')}</small></span>
+                            <span><strong>${escapeHtml(contact.name)}</strong><small>${escapeHtml(formatMvNumberForDisplay(contact.mobile))} · ${escapeHtml(contact.groupName || 'Unassigned')}</small></span>
                           </label>
                         `).join('')}
                         <div id="group-member-no-results" class="group-member-empty" ${availableGroupContacts.length ? 'hidden' : ''}>No other contacts are available to add.</div>
@@ -1395,6 +1461,7 @@ export function renderDashboard() {
                       <button type="button" id="add-group-members" disabled><i data-lucide="user-plus"></i><span id="add-group-members-label">Add selected contacts</span></button>
                       <p class="muted" style="margin: 10px 0 0; font-size: 0.78rem;">Contacts from another group are copied into this group. Removing a member only affects this group.</p>
                     </div>
+                    ` : ''}
                   `
                   : state.groups.length
                     ? '<div class="group-empty-state"><strong>Select a group to get started</strong>Choose a group above or use Manage from the directory.</div>'
@@ -1736,6 +1803,7 @@ export function renderDashboard() {
   const selectGroupForEditing = (groupId: string) => {
     state.groupEditorId = groupId;
     state.groupEditorMode = 'existing';
+    state.groupEditorIsLocal = groupId.startsWith('local:');
     renderDashboard();
   };
 
@@ -1751,6 +1819,7 @@ export function renderDashboard() {
     }
     state.groupEditorId = '';
     state.groupEditorMode = 'new';
+    state.groupEditorIsLocal = state.user?.role !== 'administrator';
     renderDashboard();
   });
 
@@ -1904,7 +1973,6 @@ export function renderDashboard() {
       groupId: String(formData.get('groupId') ?? '').trim(),
     };
     const appApi = apiClient();
-    // Validate after normalization so equivalent phone spellings cannot bypass per-group duplicate checks.
     if (!payload.name || !payload.mobile || !isValidMvMobile(payload.mobile)) {
       setContactStatus('Contact not saved: use a valid Maldives mobile number.');
       return;
@@ -1913,14 +1981,63 @@ export function renderDashboard() {
       setContactStatus('Contact not saved: select a group for this contact.');
       return;
     }
+    
+    const isLocalGroup = payload.groupId.startsWith('local:');
+    if (!isLocalGroup && state.user?.role !== 'administrator') {
+      setContactStatus('Contact not saved: non-admin users can only add contacts to local groups.');
+      return;
+    }
+    
     if (state.contacts.some((contact) => contact.mobile === payload.mobile && contact.groupId === payload.groupId && contact.id !== contactId)) {
       setContactStatus('Contact not saved: this mobile number already exists in the selected group.');
       return;
     }
     try {
+      const isLocalGroup = payload.groupId.startsWith('local:');
+      const isLocalContact = contactId.startsWith('local:');
+      
+      if (isLocalGroup || isLocalContact) {
+        const localGroupId = payload.groupId.replace(/^local:/, '');
+        const now = new Date().toISOString();
+        
+        if (contactId) {
+          const localContactId = contactId.replace(/^local:/, '');
+          const existingContact = localContacts.find((c) => c.id === localContactId);
+          if (existingContact) {
+            const updatedContact: LocalContact = {
+              ...existingContact,
+              name: payload.name,
+              mobile: payload.mobile,
+              department: payload.department,
+              groupId: localGroupId,
+              updatedAt: now,
+            };
+            await saveLocalContact(updatedContact);
+            localContacts = localContacts.map((c) => c.id === localContactId ? updatedContact : c);
+          }
+        } else {
+          const newContact: LocalContact = {
+            id: `contact-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            userId: state.user?.id ?? '',
+            name: payload.name,
+            mobile: payload.mobile,
+            department: payload.department,
+            groupId: localGroupId,
+            createdAt: now,
+            updatedAt: now,
+          };
+          await saveLocalContact(newContact);
+          localContacts.push(newContact);
+        }
+        await loadDashboardData();
+        (document.getElementById('contact-form') as HTMLFormElement | null)?.reset();
+        setContactStatus(contactId ? `Contact updated for ${payload.mobile}.` : `Contact added for ${payload.mobile}.`);
+        return;
+      }
+      
       if (!appApi) {
         const groupName = state.groups.find((group) => group.id === payload.groupId)?.name ?? 'Unassigned';
-        state.contacts.unshift({ id: `demo-${Date.now()}`, name: payload.name, mobile: payload.mobile, department: payload.department, groupId: payload.groupId, groupName });
+        state.contacts.unshift({ id: `demo-${Date.now()}`, name: payload.name, mobile: payload.mobile, department: payload.department, groupId: payload.groupId, groupName, isLocal: false });
         renderDashboard();
         (document.getElementById('contact-form') as HTMLFormElement | null)?.reset();
         setContactStatus(`Demo contact saved to ${groupName}.`);
@@ -1980,7 +2097,7 @@ export function renderDashboard() {
       const groupField = form.elements.namedItem('groupId') as HTMLSelectElement | null;
       if (hiddenIdField) hiddenIdField.value = contact.id;
       if (nameField) nameField.value = contact.name;
-      if (mobileField) mobileField.value = contact.mobile;
+      if (mobileField) mobileField.value = formatMvNumberForDisplay(contact.mobile);
       if (departmentField) departmentField.value = contact.department;
       if (designationField) designationField.value = '';
       if (notesField) notesField.value = '';
@@ -1999,6 +2116,19 @@ export function renderDashboard() {
     if (action === 'delete') {
       if (contactIds.length > 1 && !window.confirm(`Delete ${contact?.name ?? 'this contact'} from all ${contactIds.length} groups?`)) return;
       try {
+        const isLocalContact = contactId.startsWith('local:');
+        
+        if (isLocalContact) {
+          for (const id of contactIds) {
+            const localContactId = id.replace(/^local:/, '');
+            await deleteLocalContact(state.user?.id ?? '', localContactId);
+            localContacts = localContacts.filter((c) => c.id !== localContactId);
+          }
+          await loadDashboardData();
+          setContactStatus(`${contact?.name ?? 'Contact'} deleted.`);
+          return;
+        }
+        
         if (!appApi) {
           setContactStatus('Contact deletion is only available in the Electron app.');
           return;
@@ -2099,7 +2229,53 @@ export function renderDashboard() {
   const saveGroupMemberIds = async (groupId: string, memberIds: string[]) => {
     const group = state.groups.find((item) => item.id === groupId);
     if (!group) throw new Error('Select a group before editing its members.');
+
+    if (group.isLocal && state.user?.role === 'administrator') {
+      throw new Error('Administrators can only modify global groups.');
+    }
+    
+    if (!group.isLocal && state.user?.role !== 'administrator') {
+      throw new Error('Only administrators can modify global group members.');
+    }
+    
+    const isLocal = groupId.startsWith('local:');
     const appApi = apiClient();
+    
+    if (isLocal) {
+      const localGroupId = groupId.replace(/^local:/, '');
+      const now = new Date().toISOString();
+      const selectedIds = new Set(memberIds);
+      const existingLocalContacts = localContacts.filter((c) => c.groupId === localGroupId);
+      const retainedContacts = existingLocalContacts.filter((c) => selectedIds.has(c.id));
+      const newContactIds = Array.from(selectedIds).filter((id) => !existingLocalContacts.find((c) => c.id === id));
+      
+      const contactsToRemove = existingLocalContacts.filter((c) => !selectedIds.has(c.id));
+      for (const contact of contactsToRemove) {
+        await deleteLocalContact(state.user?.id ?? '', contact.id);
+      }
+      
+      for (const contactId of newContactIds) {
+        const sourceContact = state.contacts.find((c) => c.id === contactId || c.id === `local:${contactId}`);
+        if (sourceContact) {
+          const newContact: LocalContact = {
+            id: `${localGroupId}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            userId: state.user?.id ?? '',
+            name: sourceContact.name,
+            mobile: sourceContact.mobile,
+            department: sourceContact.department,
+            groupId: localGroupId,
+            createdAt: now,
+            updatedAt: now,
+          };
+          await saveLocalContact(newContact);
+          localContacts.push(newContact);
+        }
+      }
+      
+      await loadDashboardData();
+      return localContacts.filter((c) => c.groupId === localGroupId).length;
+    }
+    
     if (appApi) {
       const result = await appApi.invoke('groups:update', {
         id: group.id,
@@ -2109,7 +2285,6 @@ export function renderDashboard() {
       return result.memberCount;
     }
 
-    // Browser preview mirrors the backend's copy-per-group model without pretending to persist remotely.
     const selectedIds = new Set(memberIds);
     const existingMembers = state.contacts.filter((contact) => contact.groupId === groupId);
     const retainedMembers = existingMembers.filter((contact) => selectedIds.has(contact.id));
@@ -2173,6 +2348,7 @@ export function renderDashboard() {
     const form = event.currentTarget as HTMLFormElement;
     const formData = new FormData(form);
     const groupId = state.groupEditorMode === 'new' ? '' : state.groupEditorId;
+    const isLocal = state.user?.role !== 'administrator' && (state.groupEditorIsLocal || groupId.startsWith('local:'));
     const payload = {
       name: String(formData.get('name') ?? '').trim(),
       description: String(formData.get('description') ?? '').trim(),
@@ -2183,13 +2359,41 @@ export function renderDashboard() {
       return;
     }
     try {
+      if (isLocal) {
+        const localGroupId = groupId ? groupId.replace(/^local:/, '') : `group-${Date.now()}`;
+        const now = new Date().toISOString();
+        if (groupId) {
+          const existingGroup = localGroups.find((g) => g.id === localGroupId);
+          if (existingGroup) {
+            const updatedGroup: LocalGroup = { ...existingGroup, name: payload.name, description: payload.description, updatedAt: now };
+            await saveLocalGroup(updatedGroup);
+            localGroups = localGroups.map((g) => g.id === localGroupId ? updatedGroup : g);
+          }
+        } else {
+          const newGroup: LocalGroup = {
+            id: localGroupId,
+            userId: state.user?.id ?? '',
+            name: payload.name,
+            description: payload.description,
+            createdAt: now,
+            updatedAt: now,
+          };
+          await saveLocalGroup(newGroup);
+          localGroups.push(newGroup);
+          state.groupEditorId = `local:${localGroupId}`;
+          state.groupEditorMode = 'existing';
+        }
+        await loadDashboardData();
+        setGroupStatus(groupId ? `Local group details saved: ${payload.name}.` : `Local group created: ${payload.name}. Add members from the panel below.`);
+        return;
+      }
       if (!appApi) {
         const demoGroupId = groupId || `demo-group-${Date.now()}`;
         if (groupId) {
           state.groups = state.groups.map((group) => group.id === groupId ? { ...group, name: payload.name, description: payload.description } : group);
           state.contacts = state.contacts.map((contact) => contact.groupId === groupId ? { ...contact, groupName: payload.name } : contact);
         } else {
-          state.groups.unshift({ id: demoGroupId, name: payload.name, description: payload.description, memberCount: 0 });
+          state.groups.unshift({ id: demoGroupId, name: payload.name, description: payload.description, memberCount: 0, isLocal: false });
           state.groupEditorId = demoGroupId;
           state.groupEditorMode = 'existing';
         }
@@ -2205,6 +2409,7 @@ export function renderDashboard() {
         const created = await appApi.invoke('groups:create', payload) as { id: string };
         state.groupEditorId = created.id;
         state.groupEditorMode = 'existing';
+        state.groupEditorIsLocal = false;
         successMessage = `Group created: ${payload.name}. Add members from the panel below.`;
       }
       await loadDashboardData();
@@ -2246,14 +2451,25 @@ export function renderDashboard() {
     if (action === 'delete') {
       if (!window.confirm(`Delete ${group?.name ?? 'this group'} and remove its contacts from the directory? This cannot be undone.`)) return;
       try {
-        if (!appApi) {
-          setGroupStatus('Group deletion is only available in the Electron app.');
-          return;
+        const isLocal = groupId.startsWith('local:');
+        if (isLocal) {
+          const localGroupId = groupId.replace(/^local:/, '');
+          await deleteLocalGroup(state.user?.id ?? '', localGroupId);
+          localGroups = localGroups.filter((g) => g.id !== localGroupId);
+          localContacts = localContacts.filter((c) => c.groupId !== localGroupId);
+          if (state.groupEditorId === groupId) state.groupEditorId = '';
+          await loadDashboardData();
+          setGroupStatus(`${group?.name ?? 'Group'} and its contacts were deleted.`);
+        } else {
+          if (!appApi) {
+            setGroupStatus('Group deletion is only available in the Electron app.');
+            return;
+          }
+          await appApi.invoke('groups:delete', { id: groupId });
+          if (state.groupEditorId === groupId) state.groupEditorId = '';
+          await loadDashboardData();
+          setGroupStatus(`${group?.name ?? 'Group'} and its contacts were deleted.`);
         }
-        await appApi.invoke('groups:delete', { id: groupId });
-        if (state.groupEditorId === groupId) state.groupEditorId = '';
-        await loadDashboardData();
-        setGroupStatus(`${group?.name ?? 'Group'} and its contacts were deleted.`);
       } catch (error) {
         setGroupStatus(error instanceof Error ? error.message : 'Unable to delete group.');
       }
@@ -2296,12 +2512,12 @@ export function renderDashboard() {
     try {
       if (!appApi) {
         const demoRecipients = payload.groupId ? ['9607712345'] : directNumbers;
-        state.sms.unshift(...demoRecipients.map((number, index) => ({
-          id: `demo-sms-${Date.now()}-${index}`,
-          to: number,
+        state.sms.unshift({
+          id: `demo-sms-${Date.now()}`,
+          to: demoRecipients.join(','),
           message: payload.message,
           status: 'queued',
-        })));
+        });
         renderDashboard();
         const refreshedStatus = document.getElementById('sms-status');
         notifyStatus(refreshedStatus, `Demo SMS queued for ${demoRecipients.length} recipient(s).`, 'success');
@@ -2310,7 +2526,10 @@ export function renderDashboard() {
       const queued = await appApi.invoke('sms:queue', payload) as unknown[];
       await loadDashboardData();
       const refreshedStatus = document.getElementById('sms-status');
-      notifyStatus(refreshedStatus, `SMS queued for ${queued.length} recipient(s).`, 'success');
+      const recipientCount = payload.groupId
+        ? String((queued[0] as { to?: string } | undefined)?.to ?? '').split(',').filter(Boolean).length
+        : directNumbers.length;
+      notifyStatus(refreshedStatus, `SMS queued for ${recipientCount} recipient(s) as ${queued.length} queue item${queued.length === 1 ? '' : 's'}.`, 'success');
       form.reset();
     } catch (error) {
       notifyStatus(status, error instanceof Error ? error.message : 'Unable to queue SMS.', 'error');
@@ -2340,8 +2559,11 @@ export function renderDashboard() {
   });
 
   document.getElementById('export-contacts-csv')?.addEventListener('click', () => {
+    const exportableContacts = isAdministrator
+      ? uniqueContacts
+      : getUniqueContactRows(state.contacts.filter((contact) => contact.isLocal));
     const csv = exportContactsCsv(
-      uniqueContacts.map(({ contact, groupNames }) => ({
+      exportableContacts.map(({ contact, groupNames }) => ({
         name: contact.name,
         mobile: contact.mobile,
         department: contact.department,
@@ -2354,7 +2576,7 @@ export function renderDashboard() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = 'contacts.csv';
+    link.download = isAdministrator ? 'contacts.csv' : 'local-contacts.csv';
     link.click();
     URL.revokeObjectURL(url);
   });
@@ -2382,6 +2604,72 @@ export function renderDashboard() {
         setImportStatus('No contact rows were found in the selected CSV file.');
         return;
       }
+      if (!isAdministrator) {
+        const normalizedRows = rows.map((row) => ({
+          row,
+          mobile: normalizeMvNumber(row.mobile),
+        }));
+        for (const { row, mobile } of normalizedRows) {
+          if (!isValidMvMobile(mobile)) {
+            throw new Error(`Invalid mobile number for ${row.name || 'unknown contact'}: ${row.mobile}`);
+          }
+        }
+
+        const localGroupsByName = new Map(localGroups.map((group) => [group.name.trim().toLocaleLowerCase(), group]));
+        const existingLocalNumbers = new Set(
+          localContacts.map((contact) => `${contact.groupId ?? ''}:${normalizeMvNumber(contact.mobile)}`),
+        );
+        let importedCount = 0;
+        let skippedDuplicates = 0;
+        const now = new Date().toISOString();
+
+        for (const { row, mobile } of normalizedRows) {
+          const groupNames = String(row.groupName ?? '')
+            .split(',')
+            .map((name) => name.trim())
+            .filter(Boolean);
+          if (!groupNames.length) {
+            throw new Error(`A local group is required for contact ${row.name || mobile}.`);
+          }
+
+          for (const groupName of groupNames) {
+            const group = localGroupsByName.get(groupName.toLocaleLowerCase());
+            if (!group) {
+              throw new Error(`Local group not found for contact ${row.name || mobile}: ${groupName}`);
+            }
+            const numberKey = `${group.id}:${mobile}`;
+            if (existingLocalNumbers.has(numberKey)) {
+              skippedDuplicates += 1;
+              continue;
+            }
+
+            const contact: LocalContact = {
+              id: `contact-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+              userId: state.user?.id ?? '',
+              name: row.name,
+              mobile,
+              department: row.department ?? '',
+              groupId: group.id,
+              createdAt: now,
+              updatedAt: now,
+            };
+            await saveLocalContact(contact);
+            localContacts.push(contact);
+            existingLocalNumbers.add(numberKey);
+            importedCount += 1;
+          }
+        }
+
+        await loadDashboardData();
+        const duplicateSummary = skippedDuplicates === 1
+          ? ' Skipped 1 duplicate number.'
+          : skippedDuplicates > 1
+            ? ` Skipped ${skippedDuplicates} duplicate numbers.`
+            : '';
+        setImportStatus(`Imported ${importedCount} local contact${importedCount === 1 ? '' : 's'} from ${file.name}.${duplicateSummary}`);
+        return;
+      }
+
       if (!appApi) {
         setImportStatus('Contact import is only available in the Electron app.');
         return;

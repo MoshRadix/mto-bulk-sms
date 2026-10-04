@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isValidMvMobile, normalizeMvNumber, parseMvMobileList } from '../src/shared/phone';
+import { formatMvNumberForDisplay, isValidMvMobile, normalizeMvNumber, parseMvMobileList } from '../src/shared/phone';
 
 // Phone validation is shared by contact entry, imports, and direct-recipient SMS composition.
 describe('Maldives numbers', () => {
@@ -17,6 +17,10 @@ describe('Maldives numbers', () => {
   });
   it('normalizes and deduplicates comma-separated recipients', () => {
     expect(parseMvMobileList('7712345, +960 991-2345, 9607712345')).toEqual(['9607712345', '9609912345']);
+  });
+  it('formats numbers without the country code for display', () => {
+    expect(formatMvNumberForDisplay('9607712345')).toBe('7712345');
+    expect(formatMvNumberForDisplay('9607712345,9609912345')).toBe('7712345, 9912345');
   });
   it('rejects invalid and empty recipient entries', () => {
     expect(() => parseMvMobileList('9607712345,9606712345')).toThrow('Invalid Maldives mobile number');

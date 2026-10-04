@@ -31,3 +31,16 @@ export function parseMvMobileList(input: string): string[] {
 
   return [...new Set(normalizedNumbers)];
 }
+
+/** Render Maldives numbers without the country code while preserving comma-separated recipient lists. */
+export function formatMvNumberForDisplay(input: string): string {
+  return input
+    .split(',')
+    .map((entry) => {
+      const value = entry.trim();
+      const normalized = normalizeMvNumber(value);
+      return normalized.startsWith('960') && normalized.length === 10 ? normalized.slice(3) : value;
+    })
+    .filter(Boolean)
+    .join(', ');
+}

@@ -10,9 +10,16 @@ describe('Dhiraagu XML API helpers', () => {
     expect(xml).toContain('<USER_NAME>addu</USER_NAME>');
     expect(xml).toContain('<PASSWORD>secret</PASSWORD>');
     expect(xml).toContain('<DEVICE_TYPE DEVICE_TYPE="SMS"/>');
-    expect(xml).toContain('<DEVICE_VALUE>9990166</DEVICE_VALUE>');
+    expect(xml).toContain('<DEVICE_VALUE>+9990166</DEVICE_VALUE>');
     expect(xml).toContain('<TEXT>Test Message, please ignore.</TEXT>');
     expect(xml).toContain('<VERSION>1.6</VERSION>');
+  });
+
+  it('writes one device information block per recipient', () => {
+    const xml = buildDhiraaguXmlVariants({ username: 'addu', password: 'secret', sender: 'adducouncil', to: '9607000001,9607000002', text: 'Test Message' })[0];
+    expect(xml.match(/<DEVICE_INFORMATION>/g)).toHaveLength(2);
+    expect(xml).toContain('<DEVICE_VALUE>+9607000001</DEVICE_VALUE>');
+    expect(xml).toContain('<DEVICE_VALUE>+9607000002</DEVICE_VALUE>');
   });
 
   it('parses message_id and message_key from the provider response', () => {

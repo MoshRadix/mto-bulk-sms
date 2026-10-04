@@ -227,8 +227,20 @@ export function buildDhiraaguXmlVariants({ username, password, sender, to, text 
   const safeUser = escapeXml(username);
   const safePassword = escapeXml(password);
   const safeSender = escapeXml(sender);
+  const recipientValues = to
+    .split(',')
+    .map((recipient) => recipient.trim())
+    .filter(Boolean)
+    .map((recipient) => escapeXml(recipient.startsWith('+') ? recipient : `+${recipient}`));
   const safeTo = escapeXml(to);
   const safeText = escapeXml(text);
+  const deviceInformation = recipientValues
+    .map((recipient) => `
+                    <DEVICE_INFORMATION>
+                        <DEVICE_TYPE DEVICE_TYPE="SMS"/>
+                        <DEVICE_VALUE>${recipient}</DEVICE_VALUE>
+                    </DEVICE_INFORMATION>`)
+    .join('');
 
   const exactFormat = `<?xml version="1.0" encoding="UTF-8" ?>
 <TELEMESSAGE>
@@ -254,12 +266,9 @@ export function buildDhiraaguXmlVariants({ username, password, sender, to, text 
                 </TEXT_MESSAGE>
             </MESSAGE_CONTENT>
             <USER_TO>
-                <CIML>
-                    <DEVICE_INFORMATION>
-                        <DEVICE_TYPE DEVICE_TYPE="SMS"/>
-                        <DEVICE_VALUE>${safeTo}</DEVICE_VALUE>
-                    </DEVICE_INFORMATION>
-                </CIML>
+              <CIML>
+${deviceInformation}
+              </CIML>
             </USER_TO>
         </MESSAGE>
     </TELEMESSAGE_CONTENT>
@@ -873,16 +882,31 @@ export function registerSetupIpc() {
       ? await models.Group.findOne({ _id: c.groupId, deletedAt: null }).lean()
       : null;
     if (c.groupId && !group) throw new Error('Selected group was not found.');
+    const groupContacts = c.groupId
+      ? await models.Contact.find({ groupId: group!._id, deletedAt: null }).lean()
+      : [];
 
     // Snapshot the selected group membership at queue time so later edits do not change queued recipients.
     const recipients = c.groupId
-      ? (await models.Contact.find({ groupId: group!._id, deletedAt: null }).lean())
-          .map((contact) => ({ mobile: contact.mobile, name: contact.name ?? '' }))
+      ? (() => {
+          const groupRecipients = groupContacts.map((contact) => ({ mobile: contact.mobile, name: contact.name ?? '' }));
+          return groupRecipients.length
+            ? [{
+                // Keep the group send as one queue item; the XML builder expands these numbers into repeated device blocks.
+                mobile: groupRecipients.map((recipient) => recipient.mobile).join(','),
+                name: groupRecipients.map((recipient) => recipient.name).filter(Boolean).join(', '),
+              }]
+            : [];
+        })()
       : await (async () => {
           const numbers = parseDirectSmsRecipients(c.to ?? '');
           const savedContacts = await models.Contact.find({ mobile: { $in: numbers }, deletedAt: null }).select('mobile name').lean();
           const namesByNumber = new Map(savedContacts.map((contact) => [contact.mobile, contact.name ?? '']));
-          return numbers.map((mobile) => ({ mobile, name: namesByNumber.get(mobile) ?? '' }));
+          return [{
+            // Dhiraagu accepts the comma-separated recipient list in one request, so keep direct sends as one queue item.
+            mobile: numbers.join(','),
+            name: numbers.map((mobile) => namesByNumber.get(mobile) ?? '').filter(Boolean).join(', '),
+          }];
         })();
 
     if (!recipients.length) throw new Error('No contacts were found in the selected group.');

@@ -8,6 +8,7 @@ export type Contact = {
   department: string;
   groupId?: string;
   groupName?: string;
+  isLocal?: boolean;
 };
 
 export type Group = {
@@ -15,6 +16,7 @@ export type Group = {
   name: string;
   description: string;
   memberCount: number;
+  isLocal?: boolean;
 };
 
 export type SmsItem = {
@@ -69,6 +71,7 @@ export type DashboardState = {
   activeSection: 'dashboard' | 'contacts' | 'groups' | 'admin' | 'settings' | 'history' | 'templates';
   groupEditorId: string;
   groupEditorMode: 'existing' | 'new';
+  groupEditorIsLocal: boolean;
   users: UserRecord[];
   status: string;
   user: { id: string; username: string; name: string; role: string } | null;
@@ -101,6 +104,7 @@ export const state: DashboardState = {
   activeSection: 'dashboard',
   groupEditorId: '',
   groupEditorMode: 'existing',
+  groupEditorIsLocal: false,
   users: [],
   status: 'Loading dashboard...',
   user: null,

@@ -1,0 +1,101 @@
+I’ll ground the suggestions in the app’s current structure and features so the ideas are practical rather than generic. I’m checking the README and main dashboard capabilities first.
+
+Ran terminal command: "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-Content README.md; Select-String -Path src\\dashboard.ts -Pattern '<h[12]|id=\"["'^"]+"|data-section="'"' | Select-Object -First 180"
+
+
+
+The app already has a solid foundation: contacts, groups, CSV import/export, SMS sending, history, templates, user roles, reports, and local/global data separation.
+
+### Highest-value improvements
+
+1. **Scheduled SMS**
+   - Schedule messages for a future date/time.
+   - Add recurring messages for reminders or announcements.
+   - Show scheduled, pending, sent, failed, and cancelled states.
+
+2. **Delivery tracking**
+   - Display delivery status per recipient.
+   - Show totals for delivered, failed, pending, and rejected messages.
+   - Allow retrying failed numbers only.
+
+3. **Message campaigns**
+   - Save a message, target group, sender, and schedule as a campaign.
+   - Track campaign progress and delivery results.
+   - Add campaign history and duplicate-send protection.
+
+4. **Contact segmentation**
+   - Add tags such as `staff`, `residents`, `committee`, or `emergency`.
+   - Filter contacts by group, department, tag, status, or location.
+   - Allow sending to multiple groups while automatically removing duplicate numbers.
+
+5. **Better CSV import**
+   - Preview rows before importing.
+   - Show invalid numbers, duplicates, missing names, and unknown groups.
+   - Allow users to choose whether duplicates are skipped, updated, or rejected.
+   - Provide a downloadable error report.
+
+6. **Contact history**
+   - Show the last messages sent to a contact.
+   - Display opt-out status, delivery history, notes, and group membership.
+   - Add a “do not contact” flag.
+
+7. **Message personalization**
+   - Support variables such as `{name}`, `{group}`, or `{department}`.
+   - Preview the final message for several recipients before sending.
+   - Warn when personalization pushes messages over the character limit.
+
+8. **Approval workflow**
+   - Non-admin users prepare campaigns.
+   - Admin users review and approve them before sending.
+   - Keep an approval history with the user, date, and decision.
+
+9. **Audit log**
+   - Record contact changes, group changes, imports, exports, login events, and SMS actions.
+   - Add filters by user, action, date, and object.
+   - This would be especially useful for council accountability.
+
+10. **Backup and restore**
+    - Export contacts, groups, templates, and settings into a backup file.
+    - Support restoring from a backup with a preview and conflict report.
+    - Add scheduled database backup reminders.
+
+### Useful dashboard improvements
+
+- Today’s messages sent.
+- Delivery success rate.
+- Failed-message count.
+- Most-used groups.
+- Contacts added this month.
+- Recent campaigns.
+- SMS balance or provider availability.
+- A warning when the database or SMS provider is unavailable.
+
+### Operational safeguards
+
+- Confirm the recipient count before sending.
+- Require confirmation for large sends.
+- Add a configurable daily sending limit.
+- Prevent accidental repeated sends of the same message to the same group.
+- Add an emergency “pause sending” control.
+- Automatically retry temporary provider failures.
+- Preserve a full provider response for troubleshooting.
+
+### UX improvements
+
+- Add bulk group assignment for contacts.
+- Support drag-and-drop CSV upload.
+- Add sorting by name, department, group, and recently added.
+- Add keyboard navigation and clearer focus states.
+- Add inline success/error notifications instead of relying only on status text.
+- Improve empty states with direct actions such as “Create group” or “Import contacts”.
+- Add a global search across contacts, groups, templates, and SMS history.
+
+### Recommended implementation order
+
+1. Delivery tracking and failed-message retry.
+2. CSV preview and validation.
+3. Scheduled SMS and campaigns.
+4. Audit log and approval workflow.
+5. Contact tags and advanced filtering.
+6. Backup/restore.
+7. Dashboard analytics and UI polish.
