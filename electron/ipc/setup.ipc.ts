@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron';
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import { loadSecret, saveSecret } from '../security/credentialStore';
 import { connectDatabase, initializeCollections, testConnection } from '../db/connection';

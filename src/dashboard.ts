@@ -544,6 +544,13 @@ export function renderDashboard() {
   // The sections share one shell; `activeSection` controls visibility without discarding loaded state.
   root.innerHTML = `
     <style>
+      @font-face {
+        font-family: "Inter";
+        src: url("../assets/Inter-VariableFont_opsz,wght.ttf") format("truetype");
+        font-style: normal;
+        font-weight: 100 900;
+        font-display: swap;
+      }
       :root {
         --bg: #091320;
         --bg-strong: #0f172a;
@@ -565,7 +572,7 @@ export function renderDashboard() {
       * { box-sizing: border-box; }
       body {
         margin: 0;
-        font-family: "Segoe UI", sans-serif;
+        font-family: "Inter", "Segoe UI", sans-serif;
         background:
           linear-gradient(rgba(148, 163, 184, 0.025) 1px, transparent 1px),
           linear-gradient(90deg, rgba(148, 163, 184, 0.025) 1px, transparent 1px),

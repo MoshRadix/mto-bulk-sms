@@ -62,9 +62,16 @@ export function renderSetup(message = 'Configure MongoDB to continue.', administ
   let setupPhase: 'database' | 'administrator' = administratorSetupOnly ? 'administrator' : 'database';
   root.innerHTML = `
     <style>
+      @font-face {
+        font-family: "Inter";
+        src: url("../assets/Inter-VariableFont_opsz,wght.ttf") format("truetype");
+        font-style: normal;
+        font-weight: 100 900;
+        font-display: swap;
+      }
       :root { --panel: rgba(15, 23, 42, 0.9); --border: rgba(255,255,255,0.09); --text: #e5e7eb; --muted: #9ca3af; --accent: #38bdf8; }
       * { box-sizing: border-box; }
-      body { margin: 0; font-family: "Segoe UI", sans-serif; background: linear-gradient(135deg, #091320, #0f172a 48%, #102435); color: var(--text); }
+      body { margin: 0; font-family: "Inter", "Segoe UI", sans-serif; background: linear-gradient(135deg, #091320, #0f172a 48%, #102435); color: var(--text); }
       .login-shell { min-height: 100vh; display: grid; place-items: center; padding: 24px; }
       .login-card { width: min(500px, 100%); background: var(--panel); border: 1px solid var(--border); border-radius: 18px; box-shadow: 0 18px 50px rgba(2, 8, 23, 0.5); padding: 28px; }
       .brand { display: grid; justify-items: center; gap: 8px; font-size: 1rem; font-weight: 700; text-align: center; }
@@ -224,9 +231,16 @@ export function renderLogin() {
 
   root.innerHTML = `
     <style>
+      @font-face {
+        font-family: "Inter";
+        src: url("../assets/Inter-VariableFont_opsz,wght.ttf") format("truetype");
+        font-style: normal;
+        font-weight: 100 900;
+        font-display: swap;
+      }
       :root { --panel: rgba(15, 23, 42, 0.9); --border: rgba(255,255,255,0.09); --text: #e5e7eb; --muted: #9ca3af; --accent: #38bdf8; }
       * { box-sizing: border-box; }
-      body { margin: 0; font-family: "Segoe UI", sans-serif; background: linear-gradient(135deg, #091320, #0f172a 48%, #102435); color: var(--text); }
+      body { margin: 0; font-family: "Inter", "Segoe UI", sans-serif; background: linear-gradient(135deg, #091320, #0f172a 48%, #102435); color: var(--text); }
       .login-shell { min-height: 100vh; display: grid; place-items: center; padding: 24px; }
       .login-card { width: min(430px, 100%); background: var(--panel); border: 1px solid var(--border); border-radius: 18px; box-shadow: 0 18px 50px rgba(2, 8, 23, 0.5); padding: 28px; }
       .brand { display: grid; justify-items: center; gap: 8px; font-size: 1rem; font-weight: 700; text-align: center; }
