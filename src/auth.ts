@@ -72,6 +72,13 @@ export function renderSetup(message = 'Configure MongoDB to continue.', administ
       :root { --panel: rgba(15, 23, 42, 0.9); --border: rgba(255,255,255,0.09); --text: #e5e7eb; --muted: #9ca3af; --accent: #38bdf8; }
       * { box-sizing: border-box; }
       body { margin: 0; font-family: "Inter", "Segoe UI", sans-serif; background: linear-gradient(135deg, #091320, #0f172a 48%, #102435); color: var(--text); }
+      @property --rain-angle { syntax: "<angle>"; inherits: false; initial-value: 108deg; }
+      body::before { --rain-angle: 108deg; content: ""; position: fixed; inset: -120px -80px; z-index: 0; pointer-events: none; opacity: 0.12; background-image: repeating-linear-gradient(var(--rain-angle), transparent 0 38px, rgba(186, 230, 253, 0.34) 39px, transparent 41px 82px), repeating-linear-gradient(var(--rain-angle), transparent 0 73px, rgba(125, 211, 252, 0.2) 74px, transparent 76px 146px); background-size: 92px 110px, 158px 180px; background-position: 0 0, 0 0; animation: auth-rain-flow 60s ease-in-out infinite, auth-rain-intensity 42s ease-in-out infinite; }
+      body::after { content: ""; position: fixed; inset: 0; z-index: 0; pointer-events: none; opacity: 0; background: radial-gradient(ellipse at 72% 8%, rgba(219, 244, 255, 0.28), transparent 32%), linear-gradient(112deg, transparent 0 68%, rgba(186, 230, 253, 0.1) 68.2%, transparent 69%); animation: auth-lightning 24s ease-in-out infinite; }
+      #root { position: relative; z-index: 1; }
+      @keyframes auth-rain-flow { 0% { --rain-angle: 108deg; background-position: 0 0, 0 0; } 18% { --rain-angle: 111deg; background-position: -42px 80px, -74px 132px; } 47% { --rain-angle: 118deg; background-position: -92px 220px, -158px 360px; } 76% { --rain-angle: 101deg; background-position: -34px 330px, -72px 540px; } 100% { --rain-angle: 108deg; background-position: 0 440px, 0 720px; } }
+      @keyframes auth-rain-intensity { 0%, 100% { opacity: 0.08; } 28% { opacity: 0.13; } 55% { opacity: 0.17; } 78% { opacity: 0.11; } }
+      @keyframes auth-lightning { 0%, 87%, 90%, 93%, 100% { opacity: 0; } 88% { opacity: 0.22; } 89% { opacity: 0.04; } 91% { opacity: 0.14; } 92% { opacity: 0.02; } }
       .login-shell { min-height: 100vh; display: grid; place-items: center; padding: 24px; }
       .login-card { width: min(500px, 100%); background: var(--panel); border: 1px solid var(--border); border-radius: 18px; box-shadow: 0 18px 50px rgba(2, 8, 23, 0.5); padding: 28px; }
       .brand { display: grid; justify-items: center; gap: 8px; font-size: 1rem; font-weight: 700; text-align: center; }
@@ -241,6 +248,13 @@ export function renderLogin() {
       :root { --panel: rgba(15, 23, 42, 0.9); --border: rgba(255,255,255,0.09); --text: #e5e7eb; --muted: #9ca3af; --accent: #38bdf8; }
       * { box-sizing: border-box; }
       body { margin: 0; font-family: "Inter", "Segoe UI", sans-serif; background: linear-gradient(135deg, #091320, #0f172a 48%, #102435); color: var(--text); }
+      @property --rain-angle { syntax: "<angle>"; inherits: false; initial-value: 108deg; }
+      body::before { --rain-angle: 108deg; content: ""; position: fixed; inset: -120px -80px; z-index: 0; pointer-events: none; opacity: 0.12; background-image: repeating-linear-gradient(var(--rain-angle), transparent 0 38px, rgba(186, 230, 253, 0.34) 39px, transparent 41px 82px), repeating-linear-gradient(var(--rain-angle), transparent 0 73px, rgba(125, 211, 252, 0.2) 74px, transparent 76px 146px); background-size: 92px 110px, 158px 180px; background-position: 0 0, 0 0; animation: auth-rain-flow 60s ease-in-out infinite, auth-rain-intensity 42s ease-in-out infinite; }
+      body::after { content: ""; position: fixed; inset: 0; z-index: 0; pointer-events: none; opacity: 0; background: radial-gradient(ellipse at 72% 8%, rgba(219, 244, 255, 0.28), transparent 32%), linear-gradient(112deg, transparent 0 68%, rgba(186, 230, 253, 0.1) 68.2%, transparent 69%); animation: auth-lightning 24s ease-in-out infinite; }
+      #root { position: relative; z-index: 1; }
+      @keyframes auth-rain-flow { 0% { --rain-angle: 108deg; background-position: 0 0, 0 0; } 18% { --rain-angle: 111deg; background-position: -42px 80px, -74px 132px; } 47% { --rain-angle: 118deg; background-position: -92px 220px, -158px 360px; } 76% { --rain-angle: 101deg; background-position: -34px 330px, -72px 540px; } 100% { --rain-angle: 108deg; background-position: 0 440px, 0 720px; } }
+      @keyframes auth-rain-intensity { 0%, 100% { opacity: 0.08; } 28% { opacity: 0.13; } 55% { opacity: 0.17; } 78% { opacity: 0.11; } }
+      @keyframes auth-lightning { 0%, 87%, 90%, 93%, 100% { opacity: 0; } 88% { opacity: 0.22; } 89% { opacity: 0.04; } 91% { opacity: 0.14; } 92% { opacity: 0.02; } }
       .login-shell { min-height: 100vh; display: grid; place-items: center; padding: 24px; }
       .login-card { width: min(430px, 100%); background: var(--panel); border: 1px solid var(--border); border-radius: 18px; box-shadow: 0 18px 50px rgba(2, 8, 23, 0.5); padding: 28px; }
       .brand { display: grid; justify-items: center; gap: 8px; font-size: 1rem; font-weight: 700; text-align: center; }

@@ -580,6 +580,13 @@ export function renderDashboard() {
         background-size: 32px 32px, 32px 32px, auto;
         color: var(--text);
       }
+      @property --rain-angle { syntax: "<angle>"; inherits: false; initial-value: 108deg; }
+      body::before { --rain-angle: 108deg; content: ""; position: fixed; inset: -120px -80px; z-index: 0; pointer-events: none; opacity: 0.12; background-image: repeating-linear-gradient(var(--rain-angle), transparent 0 38px, rgba(186, 230, 253, 0.34) 39px, transparent 41px 82px), repeating-linear-gradient(var(--rain-angle), transparent 0 73px, rgba(125, 211, 252, 0.2) 74px, transparent 76px 146px); background-size: 92px 110px, 158px 180px; background-position: 0 0, 0 0; animation: dashboard-rain-flow 60s ease-in-out infinite, dashboard-rain-intensity 42s ease-in-out infinite; }
+      body::after { content: ""; position: fixed; inset: 0; z-index: 0; pointer-events: none; opacity: 0; background: radial-gradient(ellipse at 72% 8%, rgba(219, 244, 255, 0.28), transparent 32%), linear-gradient(112deg, transparent 0 68%, rgba(186, 230, 253, 0.1) 68.2%, transparent 69%); animation: dashboard-lightning 24s ease-in-out infinite; }
+      #root { position: relative; z-index: 1; }
+      @keyframes dashboard-rain-flow { 0% { --rain-angle: 108deg; background-position: 0 0, 0 0; } 18% { --rain-angle: 111deg; background-position: -42px 80px, -74px 132px; } 47% { --rain-angle: 118deg; background-position: -92px 220px, -158px 360px; } 76% { --rain-angle: 101deg; background-position: -34px 330px, -72px 540px; } 100% { --rain-angle: 108deg; background-position: 0 440px, 0 720px; } }
+      @keyframes dashboard-rain-intensity { 0%, 100% { opacity: 0.08; } 28% { opacity: 0.13; } 55% { opacity: 0.17; } 78% { opacity: 0.11; } }
+      @keyframes dashboard-lightning { 0%, 87%, 90%, 93%, 100% { opacity: 0; } 88% { opacity: 0.22; } 89% { opacity: 0.04; } 91% { opacity: 0.14; } 92% { opacity: 0.02; } }
       .app { min-height: 100vh; padding: 24px; }
       .app-shell {
         max-width: 1500px;
