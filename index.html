@@ -19,9 +19,29 @@
 			* { box-sizing: border-box; }
 			html, body, #root { min-height: 100%; margin: 0; }
 			@property --rain-angle { syntax: "<angle>"; inherits: false; initial-value: 108deg; }
+			@property --walker-look { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
 			body::before { --rain-angle: 108deg; content: ""; position: fixed; inset: -120px -80px; z-index: 0; pointer-events: none; opacity: 0.12; background-image: repeating-linear-gradient(var(--rain-angle), transparent 0 38px, rgba(186, 230, 253, 0.34) 39px, transparent 41px 82px), repeating-linear-gradient(var(--rain-angle), transparent 0 73px, rgba(125, 211, 252, 0.2) 74px, transparent 76px 146px); background-size: 92px 110px, 158px 180px; background-position: 0 0, 0 0; animation: boot-rain-flow 60s ease-in-out infinite, boot-rain-intensity 42s ease-in-out infinite; }
 			body::after { content: ""; position: fixed; inset: 0; z-index: 0; pointer-events: none; opacity: 0; background: radial-gradient(ellipse at 72% 8%, rgba(219, 244, 255, 0.28), transparent 32%), linear-gradient(112deg, transparent 0 68%, rgba(186, 230, 253, 0.1) 68.2%, transparent 69%); animation: boot-lightning 24s ease-in-out infinite; }
 			#root { position: relative; z-index: 1; }
+			#rain-walker { position: fixed; left: 0; bottom: 0; z-index: 2; width: 23px; height: 37px; opacity: 0; pointer-events: none; transform: translateX(-42px); }
+			#rain-walker.is-visible { opacity: 0.78; }
+			.walker-pose { position: relative; width: 23px; height: 37px; transform: scale(var(--walker-size, 0.74)) scaleX(var(--walker-scale, 1)) rotate(calc(var(--walker-lean, 0deg) + var(--walker-look, 0deg))); transform-origin: center bottom; transition: --walker-look 360ms ease-in-out; animation: walker-bob var(--walker-step, 0.68s) ease-in-out infinite; }
+			.walker-head { position: absolute; left: 8px; top: 0; width: 7px; height: 7px; border: 1px solid rgba(226, 245, 255, 0.86); border-radius: 50%; background: rgba(226, 245, 255, 0.86); }
+			.walker-body, .walker-arm, .walker-leg { position: absolute; display: block; z-index: 1; width: 2px; border-radius: 2px; background: rgba(226, 245, 255, 0.86); transform-origin: top center; backface-visibility: visible; }
+			.walker-body { left: 11px; top: 8px; height: 15px; }
+			.walker-arm { top: 10px; height: 11px; }
+			.walker-arm-front { left: 11px; transform: rotate(-34deg); animation: walker-arm-front var(--walker-step, 0.68s) ease-in-out infinite; }
+			.walker-arm-back { left: 11px; transform: rotate(34deg); animation: walker-arm-back var(--walker-step, 0.68s) ease-in-out infinite; }
+			.walker-leg { top: 23px; height: 14px; }
+			.walker-leg-front { left: 11px; transform: rotate(26deg); animation: walker-leg-front var(--walker-step, 0.68s) ease-in-out infinite; }
+			.walker-leg-back { left: 11px; transform: rotate(-24deg); animation: walker-leg-back var(--walker-step, 0.68s) ease-in-out infinite; }
+			#rain-walker.is-paused .walker-arm, #rain-walker.is-paused .walker-leg { animation-play-state: paused; }
+			@keyframes walker-bob { 0%, 100% { transform: scale(var(--walker-size, 0.74)) scaleX(var(--walker-scale, 1)) rotate(calc(var(--walker-lean, 0deg) + var(--walker-look, 0deg))) translateY(0); } 50% { transform: scale(var(--walker-size, 0.74)) scaleX(var(--walker-scale, 1)) rotate(calc(var(--walker-lean, 0deg) + var(--walker-look, 0deg))) translateY(-0.6px); } }
+			@keyframes walker-arm-front { 0%, 100% { transform: rotate(-34deg); } 50% { transform: rotate(32deg); } }
+			@keyframes walker-arm-back { 0%, 100% { transform: rotate(34deg); } 50% { transform: rotate(-32deg); } }
+			@keyframes walker-leg-front { 0%, 100% { transform: rotate(26deg); } 50% { transform: rotate(-24deg); } }
+			@keyframes walker-leg-back { 0%, 100% { transform: rotate(-24deg); } 50% { transform: rotate(26deg); } }
+			@media (prefers-reduced-motion: reduce) { #rain-walker { display: none; } }
 			@keyframes boot-rain-flow { 0% { --rain-angle: 108deg; background-position: 0 0, 0 0; } 18% { --rain-angle: 111deg; background-position: -42px 80px, -74px 132px; } 47% { --rain-angle: 118deg; background-position: -92px 220px, -158px 360px; } 76% { --rain-angle: 101deg; background-position: -34px 330px, -72px 540px; } 100% { --rain-angle: 108deg; background-position: 0 440px, 0 720px; } }
 			@keyframes boot-rain-intensity { 0%, 100% { opacity: 0.08; } 28% { opacity: 0.13; } 55% { opacity: 0.17; } 78% { opacity: 0.11; } }
 			@keyframes boot-lightning { 0%, 87%, 90%, 93%, 100% { opacity: 0; } 88% { opacity: 0.22; } 89% { opacity: 0.04; } 91% { opacity: 0.14; } 92% { opacity: 0.02; } }
@@ -50,6 +70,16 @@
 					</div>
 				</div>
 			</main>
+		</div>
+		<div id="rain-walker" aria-hidden="true">
+			<div class="walker-pose">
+				<span class="walker-head"></span>
+				<span class="walker-body"></span>
+				<span class="walker-arm walker-arm-front"></span>
+				<span class="walker-arm walker-arm-back"></span>
+				<span class="walker-leg walker-leg-front"></span>
+				<span class="walker-leg walker-leg-back"></span>
+			</div>
 		</div>
 		<script type="module" src="/src/main.ts"></script>
 	</body>
