@@ -1,6 +1,6 @@
 {
   "name": "mto-bulk-sms-manager",
-  "version": "0.1.2",
+  "version": "0.1.4",
   "description": "Bulk SMS management for Maradhoo Town Office, Addu City Council",
   "license": "ISC",
   "author": "M0SH",
@@ -65,5 +65,9 @@
       "repo": "mto-bulk-sms",
       "releaseType": "release"
     }
+  },
+  "allowScripts": {
+    "esbuild@0.21.5": true,
+    "keytar@7.9.0": true
   }
 }
