@@ -93,26 +93,6 @@ async function copyTextToClipboard(value: string): Promise<void> {
   if (!copied) throw new Error('Clipboard access is unavailable.');
 }
 
-function restoreSmsComposerForDirectRecipients(): void {
-  const recipientInput = document.getElementById('sms-recipient-numbers') as HTMLInputElement | null;
-  const groupSelect = document.getElementById('sms-group') as HTMLSelectElement | null;
-  const messageInput = document.getElementById('sms-message') as HTMLTextAreaElement | null;
-
-  // Group mode disables direct numbers; clear that mode and stale number before unlocking both fields.
-  if (groupSelect?.value) {
-    groupSelect.value = '';
-    if (recipientInput) recipientInput.value = '';
-  }
-  if (recipientInput) {
-    recipientInput.disabled = false;
-    recipientInput.readOnly = false;
-  }
-  if (messageInput) {
-    messageInput.disabled = false;
-    messageInput.readOnly = false;
-  }
-}
-
 export async function loadDashboardData() {
   const appApi = apiClient();
   state.view = 'dashboard';
@@ -544,13 +524,6 @@ export function renderDashboard() {
   // The sections share one shell; `activeSection` controls visibility without discarding loaded state.
   root.innerHTML = `
     <style>
-      @font-face {
-        font-family: "Inter";
-        src: url("../assets/Inter-VariableFont_opsz,wght.ttf") format("truetype");
-        font-style: normal;
-        font-weight: 100 900;
-        font-display: swap;
-      }
       :root {
         --bg: #091320;
         --bg-strong: #0f172a;
@@ -572,7 +545,7 @@ export function renderDashboard() {
       * { box-sizing: border-box; }
       body {
         margin: 0;
-        font-family: "Inter", "Segoe UI", sans-serif;
+        font-family: "Segoe UI", system-ui, sans-serif;
         background:
           linear-gradient(rgba(148, 163, 184, 0.025) 1px, transparent 1px),
           linear-gradient(90deg, rgba(148, 163, 184, 0.025) 1px, transparent 1px),
@@ -2260,7 +2233,7 @@ export function renderDashboard() {
       const now = new Date().toISOString();
       const selectedIds = new Set(memberIds);
       const existingLocalContacts = localContacts.filter((c) => c.groupId === localGroupId);
-      const retainedContacts = existingLocalContacts.filter((c) => selectedIds.has(c.id));
+      // Reconcile the local group in place: remove deselected records, then create only new links.
       const newContactIds = Array.from(selectedIds).filter((id) => !existingLocalContacts.find((c) => c.id === id));
       
       const contactsToRemove = existingLocalContacts.filter((c) => !selectedIds.has(c.id));

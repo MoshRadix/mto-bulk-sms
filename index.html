@@ -8,14 +8,8 @@
 		<link rel="apple-touch-icon" href="./assets/addu-city-icon.png" />
 		<title>MTO Bulk SMS Manager</title>
 		<style>
-			@font-face {
-				font-family: "Inter";
-				src: url("./assets/Inter-VariableFont_opsz,wght.ttf") format("truetype");
-				font-style: normal;
-				font-weight: 100 900;
-				font-display: swap;
-			}
-			:root { color-scheme: dark; font-family: "Inter", "Segoe UI", sans-serif; background: #091320; color: #ebf2ff; }
+			/* Use the platform UI font so the renderer does not ship a 875 KB font file. */
+			:root { color-scheme: dark; font-family: "Segoe UI", system-ui, sans-serif; background: #091320; color: #ebf2ff; }
 			* { box-sizing: border-box; }
 			html, body, #root { min-height: 100%; margin: 0; }
 			@property --rain-angle { syntax: "<angle>"; inherits: false; initial-value: 108deg; }

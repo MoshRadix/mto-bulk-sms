@@ -62,16 +62,9 @@ export function renderSetup(message = 'Configure MongoDB to continue.', administ
   let setupPhase: 'database' | 'administrator' = administratorSetupOnly ? 'administrator' : 'database';
   root.innerHTML = `
     <style>
-      @font-face {
-        font-family: "Inter";
-        src: url("../assets/Inter-VariableFont_opsz,wght.ttf") format("truetype");
-        font-style: normal;
-        font-weight: 100 900;
-        font-display: swap;
-      }
       :root { --panel: rgba(15, 23, 42, 0.9); --border: rgba(255,255,255,0.09); --text: #e5e7eb; --muted: #9ca3af; --accent: #38bdf8; }
       * { box-sizing: border-box; }
-      body { margin: 0; font-family: "Inter", "Segoe UI", sans-serif; background: linear-gradient(135deg, #091320, #0f172a 48%, #102435); color: var(--text); }
+      body { margin: 0; font-family: "Segoe UI", system-ui, sans-serif; background: linear-gradient(135deg, #091320, #0f172a 48%, #102435); color: var(--text); }
       @property --rain-angle { syntax: "<angle>"; inherits: false; initial-value: 108deg; }
       body::before { --rain-angle: 108deg; content: ""; position: fixed; inset: -120px -80px; z-index: 0; pointer-events: none; opacity: 0.12; background-image: repeating-linear-gradient(var(--rain-angle), transparent 0 38px, rgba(186, 230, 253, 0.34) 39px, transparent 41px 82px), repeating-linear-gradient(var(--rain-angle), transparent 0 73px, rgba(125, 211, 252, 0.2) 74px, transparent 76px 146px); background-size: 92px 110px, 158px 180px; background-position: 0 0, 0 0; animation: auth-rain-flow 60s ease-in-out infinite, auth-rain-intensity 42s ease-in-out infinite; }
       body::after { content: ""; position: fixed; inset: 0; z-index: 0; pointer-events: none; opacity: 0; background: radial-gradient(ellipse at 72% 8%, rgba(219, 244, 255, 0.28), transparent 32%), linear-gradient(112deg, transparent 0 68%, rgba(186, 230, 253, 0.1) 68.2%, transparent 69%); animation: auth-lightning 24s ease-in-out infinite; }
@@ -238,16 +231,9 @@ export function renderLogin() {
 
   root.innerHTML = `
     <style>
-      @font-face {
-        font-family: "Inter";
-        src: url("../assets/Inter-VariableFont_opsz,wght.ttf") format("truetype");
-        font-style: normal;
-        font-weight: 100 900;
-        font-display: swap;
-      }
       :root { --panel: rgba(15, 23, 42, 0.9); --border: rgba(255,255,255,0.09); --text: #e5e7eb; --muted: #9ca3af; --accent: #38bdf8; }
       * { box-sizing: border-box; }
-      body { margin: 0; font-family: "Inter", "Segoe UI", sans-serif; background: linear-gradient(135deg, #091320, #0f172a 48%, #102435); color: var(--text); }
+      body { margin: 0; font-family: "Segoe UI", system-ui, sans-serif; background: linear-gradient(135deg, #091320, #0f172a 48%, #102435); color: var(--text); }
       @property --rain-angle { syntax: "<angle>"; inherits: false; initial-value: 108deg; }
       body::before { --rain-angle: 108deg; content: ""; position: fixed; inset: -120px -80px; z-index: 0; pointer-events: none; opacity: 0.12; background-image: repeating-linear-gradient(var(--rain-angle), transparent 0 38px, rgba(186, 230, 253, 0.34) 39px, transparent 41px 82px), repeating-linear-gradient(var(--rain-angle), transparent 0 73px, rgba(125, 211, 252, 0.2) 74px, transparent 76px 146px); background-size: 92px 110px, 158px 180px; background-position: 0 0, 0 0; animation: auth-rain-flow 60s ease-in-out infinite, auth-rain-intensity 42s ease-in-out infinite; }
       body::after { content: ""; position: fixed; inset: 0; z-index: 0; pointer-events: none; opacity: 0; background: radial-gradient(ellipse at 72% 8%, rgba(219, 244, 255, 0.28), transparent 32%), linear-gradient(112deg, transparent 0 68%, rgba(186, 230, 253, 0.1) 68.2%, transparent 69%); animation: auth-lightning 24s ease-in-out infinite; }
